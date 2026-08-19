@@ -20,6 +20,7 @@ credentials exist.
 | [docs/STRATEJI-NOTU.md](docs/STRATEJI-NOTU.md) | Strategy note: criteria, costs, limits |
 | [docs/GERCEK-VERI.md](docs/GERCEK-VERI.md) | Collecting **real** YouTube metrics |
 | [docs/DURUM.md](docs/DURUM.md) | Current state and handoff notes |
+| [docs/IKINCI-MAKINE.md](docs/IKINCI-MAKINE.md) | Setting up on a second machine, and what git deliberately does not carry |
 | [NOTICE.md](NOTICE.md) | Third-party assets, licences, and what is deliberately not committed |
 
 ---
