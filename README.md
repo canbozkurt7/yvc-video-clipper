@@ -46,7 +46,51 @@ and selection logic — is portable.
 
 ---
 
-## Install
+## Install as a Claude Code plugin
+
+The fastest path: hand Claude Code the repo and let the skill do the setup.
+
+```
+/plugin marketplace add canbozkurt7/yvc-video-clipper
+/plugin install yvc@datassist
+/yvc:setup
+```
+
+Then clip a video by asking in plain language, or:
+
+```
+/yvc:clip https://www.youtube.com/watch?v=<id>
+```
+
+The skill locates or installs a working checkout, runs `doctor`, sets
+expectations about the ~2–2.8 hour runtime, and reports what came out. It
+deliberately installs the checkout **outside** the plugin cache: a run
+writes ~1 GB into `work/`, and a plugin update would wipe it.
+
+> This repository is private. `/plugin marketplace add` uses your existing
+> git credentials, so it works for you and anyone you invite as a
+> collaborator. Make the repo public if you want it to work for anyone
+> with the link.
+
+### Or install directly
+
+```powershell
+git clone https://github.com/canbozkurt7/yvc-video-clipper.git
+./yvc-video-clipper/tools/install.ps1
+```
+
+`install.ps1` is idempotent — re-running it pulls, re-verifies and repairs.
+It creates the virtualenv, installs the package, fetches yt-dlp and Deno,
+and runs `doctor`. If pip cannot reach PyPI (TLS interception — see below)
+it falls back to the curl-based wheelhouse automatically.
+
+It cannot install three things, and reports them with exact commands
+instead of failing obscurely: **Python 3.12**, **ffmpeg built with
+libass**, and an authenticated **`claude` CLI**.
+
+---
+
+## Install manually
 
 ```bash
 git clone <this-repo> && cd yvc

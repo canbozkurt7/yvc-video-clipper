@@ -1,0 +1,11 @@
+{
+  "name": "yvc",
+  "displayName": "YVC — Video Clipper",
+  "version": "1.0.0",
+  "description": "Turn one long-form video into publishable social clips, with no manual step in between.",
+  "author": { "name": "Datassist" },
+  "homepage": "https://github.com/canbozkurt7/yvc-video-clipper",
+  "repository": "https://github.com/canbozkurt7/yvc-video-clipper",
+  "license": "MIT",
+  "keywords": ["video", "clips", "shorts", "reels", "social", "turkish"]
+}
