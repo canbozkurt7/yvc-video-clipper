@@ -78,6 +78,18 @@ if ($missing -contains 'python3.12') { throw "Cannot continue without Python 3.1
 
 # --- checkout ----------------------------------------------------------
 Step "Checkout -> $Dest"
+# Windows still caps paths at 260 characters unless long paths are enabled.
+# pip unpacks deeply nested fixture files, so a long destination fails with
+# WinError 206 only after downloading every wheel.
+$longPaths = $false
+try {
+    $longPaths = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -ErrorAction Stop).LongPathsEnabled -eq 1
+} catch { }
+if ($Dest.Length -gt 90 -and -not $longPaths) {
+    Warn "Destination path is $($Dest.Length) characters. Windows MAX_PATH will break pip partway through."
+    Warn "Use a shorter -Dest (for example C:\yvc), or enable long paths system-wide."
+    throw "Refusing to install into a path this long."
+}
 if (Test-Path (Join-Path $Dest '.git')) {
     Ok 'already a git checkout; pulling'
     git -C $Dest pull --ff-only 2>&1 | ForEach-Object { "        $_" }
@@ -151,15 +163,15 @@ try {
     # installs the package alone and native exit codes do not stop
     # PowerShell by default.
     Step 'Verifying'
-    $probe = & $vpy -c @'
-import importlib, sys
+    $probe = (& $vpy -c @'
+import importlib.util
 missing = [m for m in ("faster_whisper", "ctranslate2", "cv2", "numpy",
                        "pydantic", "yaml", "typer")
            if not importlib.util.find_spec(m)]
 print(",".join(missing))
-'@ 2>&1
+'@ 2>&1 | Out-String).Trim()
     $yvcExe = Join-Path $venv 'Scripts\yvc.exe'
-    if ($probe.Trim()) { throw "Dependencies missing after install: $probe`nNone of the install strategies worked. See the log above." }
+    if ($probe) { throw "Dependencies missing after install: $probe`nNone of the install strategies worked. See the log above." }
     Ok 'all imports resolve'
     if (-not (Test-Path $yvcExe)) { throw "The 'yvc' entry point was not created at $yvcExe." }
     Ok 'yvc entry point present'

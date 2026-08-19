@@ -28,6 +28,7 @@ from pathlib import Path
 from yvc.bootstrap import child_env
 from yvc.io import read_json, write_json, write_text
 from yvc.render.facetrack import detect_track, to_samples
+from yvc.render import cover as cover_mod
 from yvc.render.fonts import resolve_font
 from yvc.render.reframe import CropPath, build_path, filtergraph
 from yvc.render.subtitles import Word, build_ass
@@ -120,6 +121,7 @@ def render_clip(
     cfg: dict,
     encoder: str,
     ffmpeg: str = "ffmpeg",
+    wav_path: Path | None = None,
 ) -> RenderResult:
     clip_id = clip["clip_id"]
     aspect = clip["aspect"]
@@ -236,7 +238,10 @@ def render_clip(
                 render_s=round(time.time() - started, 1),
             )
 
-        cover = _cover_frame(workdir, duration, ffmpeg)
+        cover = _cover(
+            source=source, workdir=workdir, clip=clip, aspect=aspect,
+            brand=brand, duration=duration, ffmpeg=ffmpeg, wav_path=wav_path,
+        )
 
         return RenderResult(
             clip_id=clip_id,
@@ -258,9 +263,65 @@ def render_clip(
         )
 
 
-def _cover_frame(workdir: Path, duration: float, ffmpeg: str) -> str | None:
-    """Grab a cover frame, skipping the first 3 s so the hook text is not
-    burned into the thumbnail."""
+def _cover(
+    *,
+    source: Path,
+    workdir: Path,
+    clip: dict,
+    aspect: str,
+    brand: dict,
+    duration: float,
+    ffmpeg: str,
+    wav_path: Path | None,
+    source_w: int = 1920,
+    source_h: int = 1080,
+) -> str | None:
+    """Choose and compose the cover frame.
+
+    Taken from the source rather than the rendered clip, so no burnt-in
+    caption fragment ends up in the thumbnail, and chosen by score rather
+    than sampled at a fixed offset. See yvc.render.cover.
+
+    Falls back to the old fixed-offset grab if scoring finds nothing --
+    a missing cover would block publishing, and a mediocre thumbnail is
+    better than none.
+    """
+    hook = clip.get("hook_line", "") or ""
+    logo = brand.get("logo", {}).get("dark_bg")
+    logo_path = Path(logo) if logo else None
+    if logo_path and not logo_path.is_absolute():
+        logo_path = Path.cwd() / logo_path
+
+    try:
+        candidates = cover_mod.collect_candidates(
+            str(source), clip["start"], clip["end"],
+            wav_path=wav_path, source_w=source_w,
+        )
+        best = cover_mod.pick(candidates)
+    except Exception as exc:  # pragma: no cover - detector/codec surprises
+        print(f"[render]   cover scoring failed ({type(exc).__name__}: {exc}); "
+              "falling back to a fixed grab")
+        best = None
+
+    if best is not None:
+        chosen = cover_mod.render(
+            source=source, workdir=workdir, candidate=best, aspect=aspect,
+            brand=brand, source_w=source_w, source_h=source_h,
+            hook_text=hook, ffmpeg=ffmpeg, logo_path=logo_path,
+        )
+        if chosen:
+            offset = best.t - clip["start"]
+            print(f"[render]   cover at +{offset:.1f}s "
+                  f"(score {best.total:.3f}, {len(candidates)} candidates"
+                  f"{', hook overlaid' if hook.strip() else ', no hook text'})")
+            return chosen
+        print("[render]   cover composition failed; falling back to a fixed grab")
+
+    return _cover_fallback(workdir, duration, ffmpeg)
+
+
+def _cover_fallback(workdir: Path, duration: float, ffmpeg: str) -> str | None:
+    """The original behaviour: one frame at 15%, from the rendered clip."""
     at = min(max(3.5, duration * 0.15), max(3.6, duration - 0.5))
     proc = subprocess.run(
         [
@@ -310,6 +371,7 @@ def render_all(
             assets=Path(assets_dir),
             cfg=render_cfg,
             encoder=encoder,
+            wav_path=base / "audio16k_raw.wav",
         )
         results.append(result)
         if result.status == "ok":
