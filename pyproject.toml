@@ -1,0 +1,61 @@
+[project]
+name = "yvc"
+version = "0.1.0"
+description = "No-touch pipeline turning one long Turkish video into publishable social clips"
+requires-python = ">=3.12,<3.13"
+
+# Deliberately CPU-only. There is no NVIDIA GPU on the target machine and
+# only 7.7 GB of RAM, so torch-based components (pyannote, speechbrain,
+# transformers) are excluded in favour of CTranslate2 int8 and OpenCV DNN.
+dependencies = [
+    "faster-whisper>=1.2.0",
+    # 4.8.1 segfaults on load on this hardware (Tiger Lake, Windows).
+    # 4.5.0 is verified working; it needs pkg_resources, hence setuptools<81.
+    "ctranslate2==4.5.0",
+    # 1.29.0 fails with "DLL load failed" on this machine; 1.20.1 verified.
+    "onnxruntime==1.20.1",
+    "setuptools<81",
+    "opencv-python-headless>=4.10",
+    "numpy>=2.0,<3",
+    "pydantic>=2.9",
+    "PyYAML>=6.0",
+    "rich>=13.0",
+    "tenacity>=9.0",
+    "psutil>=6.0",
+    "typer>=0.15",
+    "jinja2>=3.1",
+    "structlog>=24.0",
+    "filelock>=3.16",
+    "regex>=2024.0",
+    "fonttools>=4.50",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+yvc = "yvc.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-builtins]
+# `open` is banned in this project; use yvc.io helpers, which hardcode UTF-8.
+# tests/unit/test_no_bare_open.py enforces this beyond what ruff can check.
+builtins-allowed-modules = ["io"]

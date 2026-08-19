@@ -1,0 +1,60 @@
+{
+  "name": "Datassist",
+  "_source": "Palette and typography extracted programmatically from datassist.com.tr; logos downloaded from the site's media library. Swap this file and assets/ to retarget the pipeline at another brand.",
+
+  "colors": {
+    "accent":     "#ff6716",
+    "accent_alt": "#ff1053",
+    "info":       "#1e73be",
+    "ink":        "#101010",
+    "paper":      "#ffffff"
+  },
+
+  "fonts": {
+    "display": "seguibl.ttf",
+    "display_family": "Segoe UI Black",
+    "body": "segoeuib.ttf",
+    "body_family": "Segoe UI",
+    "_note": "Family names must match the TTF 'name' table exactly. A mismatch makes libass silently substitute a fallback font, which may lack ğ/ş/ı and render tofu boxes in a published clip. Verified at preflight.",
+    "_brand_reference": "The website uses Cabin + Open Sans (latin-ext). Those are web fonts; the shipped desktop equivalents above are glyph-verified for Turkish and avoid a runtime download in a no-touch pipeline."
+  },
+
+  "logo": {
+    "light_bg": "assets/logo-dark.png",
+    "dark_bg":  "assets/logo-white.png",
+    "width_px_vertical": 200,
+    "width_px_horizontal": 260,
+    "margin_x": 56,
+    "margin_y": 72,
+    "_note": "Top-right placement deliberately avoids TikTok/Reels UI chrome, which occupies the top-left and the bottom ~250px."
+  },
+
+  "voice": {
+    "language_primary": "tr",
+    "language_secondary": "en",
+    "persona": "Bordro, ücret ve İK konularında veri odaklı, iddialı ama jargonsuz bir uzman sesi.",
+    "audience": "Türkiye'de İK yöneticileri, bordro uzmanları, KOBİ sahipleri ve ücret politikası karar vericileri."
+  },
+
+  "handles": {
+    "linkedin": "@datassist",
+    "instagram": "@datassist",
+    "x": "@datassist",
+    "youtube": "@datassist"
+  },
+
+  "destination_url": "https://www.datassist.com.tr/",
+
+  "banned_phrases": [
+    "bu videoda",
+    "kaçırmayın",
+    "mutlaka izleyin",
+    "inanılmaz",
+    "çok önemli bir konu",
+    "herkesin bilmesi gereken",
+    "game changer",
+    "bunu bilmeyen yok",
+    "şok edici"
+  ],
+  "_banned_note": "Enforced programmatically in copy/validators.py. These are the phrases that make social copy read as templated filler rather than as something written from this specific clip."
+}

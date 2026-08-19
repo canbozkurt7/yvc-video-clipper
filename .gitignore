@@ -1,0 +1,37 @@
+# --- generated output -------------------------------------------------
+# Pipeline artifacts. Everything here is reproducible from `yvc run`.
+work/
+runs/
+.yvc/
+
+# --- environment ------------------------------------------------------
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# --- vendored binaries and wheels -------------------------------------
+# `python tools/bootstrap.py` fetches these. They are ~320 MB of
+# platform-specific blobs and do not belong in version control.
+tools/bin/
+wheels/
+
+# --- proprietary fonts ------------------------------------------------
+# Segoe UI ships with Windows and is licensed for use *on* Windows, not
+# for redistribution. The pipeline resolves it from the system font
+# directory instead. See NOTICE.md.
+assets/fonts/*.ttf
+assets/fonts/*.otf
+
+# --- secrets ----------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+client_secret*.json
+token*.json
+
+# --- os ---------------------------------------------------------------
+Thumbs.db
+.DS_Store

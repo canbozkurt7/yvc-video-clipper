@@ -1,0 +1,135 @@
+# Pipeline behaviour. Secrets belong in .env, never here.
+# Precedence: CLI flag > environment variable > this file > code defaults.
+
+source:
+  # Leave empty to use tools/bin/ (see `python tools/bootstrap.py`)
+  # or whatever is on PATH. Set it only to pin a specific binary.
+  yt_dlp_path: ""
+  format: "299+140/bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/best"
+
+whisper:
+  model: small
+  compute_type: int8
+  # Stepped down automatically if the RAM preflight fails, and the downgrade
+  # is recorded in quality_report.json so a run is never silently degraded.
+  fallback_ladder: [large-v3, medium, small]
+  cpu_threads: 4
+  num_workers: 1
+  beam_size: 1
+  language: tr
+  # The single most important flag. With it enabled, large-v3 on a 60-minute
+  # Turkish panel eventually enters a repetition loop and poisons everything
+  # after it. Disabling costs a little cross-sentence coherence and buys
+  # enormous robustness.
+  condition_on_previous_text: false
+  vad_filter: true
+  vad:
+    threshold: 0.5
+    min_speech_duration_ms: 250
+    min_silence_duration_ms: 700
+    # Stops VAD clipping Turkish word-final consonants, which is exactly
+    # where the graded morphology lives.
+    speech_pad_ms: 200
+  checkpoint_every_segments: 10
+
+turkish:
+  # Running Turkish text carries 60-90 diacritics per 1000 chars. Below this
+  # floor the model has systematically ASCII-folded and the stage fails loudly
+  # rather than attempting token-by-token repair.
+  min_diacritic_density: 35.0
+  target_oov_rate: 0.06
+  # Ambiguous diacritic restorations (kar/kâr, acı/açı) are left alone unless
+  # one candidate is this much more frequent. Not guessing beats guessing.
+  frequency_ratio_threshold: 8.0
+
+segment:
+  window_s: 480
+  overlap_s: 90
+  min_segment_s: 25
+  max_segment_s: 300
+  sentence_gap_s: 0.65
+
+score:
+  threshold: 55
+  llm_passes: 1          # raise to 3 to get medians plus a stability flag
+  unstable_stdev: 1.5
+
+select:
+  vertical:   {count: 3, aspect: "9:16", min_s: 20, max_s: 60}
+  horizontal: {count: 2, aspect: "16:9", min_s: 60, max_s: 120}
+  min_gap_s: 5
+  cross_format_overlap: true   # one great moment may be both a Short and a LinkedIn cut
+  relax_step: 5
+  relax_floor: 40
+
+reframe:
+  mode: dynamic           # dynamic | static (per-shot fixed crop, the safe fallback)
+  sample_fps: 6
+  deadzone_frac: 0.06     # wider: stops the frame chasing detector noise
+  ema_alpha: 0.12
+  max_pan_px_per_s: 18    # slower: a reframe should read as intentional
+  rdp_tolerance_px: 6
+  detector_score_threshold: 0.6
+
+render:
+  workers: 2
+  encoder: libx264        # libx264 | qsv | auto  (*_nvenc is blacklisted: no NVIDIA card)
+  x264_preset: veryfast
+  x264_crf: 20
+  qsv_global_quality: 23
+  fps: 30
+  audio_bitrate: 128k
+  loudnorm: true
+
+subtitles:
+  vertical:   {font_size: 74, margin_v: 420, margin_x: 90, max_lines: 2, chars_per_line: 18}
+  horizontal: {font_size: 54, margin_v: 90,  margin_x: 120, max_lines: 2, chars_per_line: 34}
+  karaoke: true
+  uppercase: true
+
+llm:
+  model_cheap: haiku
+  model_main: sonnet
+  timeout_s: 600          # measured: ~122s/call, ~99s of it time-to-first-token
+  max_attempts: 3
+  concurrency: 1          # 7.7 GB RAM cannot host parallel CLI sessions
+  cache: true
+
+copy:
+  bilingual: true
+  min_evidence_words: 6
+  duplicate_jaccard_warn: 0.85
+
+publish:
+  mode: dry_run           # dry_run | live
+  platforms: [linkedin, instagram, x, tiktok, youtube]
+  # Route by clip shape. Instagram Reels, TikTok and Shorts are vertical-only
+  # surfaces; sending a 16:9 cut there produces a letterboxed post that the
+  # adapter would flag anyway. Filtering here means the mismatch never gets
+  # as far as generating copy for it.
+  routing_by_aspect:
+    "9:16": [instagram, tiktok, youtube]
+    "16:9": [linkedin, x]
+
+metrics:
+  windows: ["T+1h", "T+24h", "T+7d", "T+30d"]
+  simulate_missing: true
+
+feedback:
+  enabled: true
+  recency_tau_days: 90
+  shrinkage_k: 8
+  eta: 0.35
+  multiplier_bounds: [0.80, 1.25]
+  exploration_ratio: 0.20
+  adapt_criterion_weights: false
+  min_n_for_weight_adaptation: 40
+
+retention:
+  purge_source_after_render: true   # mandatory at scale: 20 videos/month fills the disk
+  keep_clips_days: 60
+  keep_runs: 30
+
+runtime:
+  min_success_ratio: 0.6
+  ram_ceiling_mb: 5000
