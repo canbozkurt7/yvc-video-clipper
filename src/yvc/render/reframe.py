@@ -95,11 +95,26 @@ def build_path(
     rdp_tolerance_px: float = 6.0,
     shot_commit: bool = True,
     commit_frac: float = 0.12,
+    mode: str = "dynamic",
 ) -> CropPath:
-    """Turn raw detections into a smoothed, simplified crop trajectory."""
+    """Turn raw detections into a smoothed, simplified crop trajectory.
+
+    ``mode="static"`` holds one window for the whole clip. It exists
+    because every snap the QC pass has measured reads as a jump cut: the
+    reframer centres the active speaker at a fixed crop width, so across
+    a cut the subject lands in the same place at the same size and only
+    the background jumps. Holding still removes that entirely, and the
+    price -- a subject that drifts within, or out of, the window -- is
+    measured into ``max_subject_offset_px`` rather than left to be found
+    on playback.
+    """
     win_w = crop_width_for_vertical(source_h)
     max_x = max(0, source_w - win_w)
     deadzone = deadzone_frac * source_w
+
+    if mode == "static":
+        return _static_path(samples, win_w=win_w, max_x=max_x, source_w=source_w,
+                            source_h=source_h)
 
     if not samples:
         # No detections at all: a centred static crop is the only honest
@@ -129,6 +144,10 @@ def build_path(
     raw: list[tuple[float, float]] = []
     held = 0
     snaps = 0
+    # Recorded, not just counted: the QC pass needs to know *where* to look
+    # at the encoded clip, and re-deriving a snap from the simplified
+    # breakpoints is guesswork once RDP has moved the vertices around.
+    snap_times: list[float] = []
     prev_shot = samples[0].shot_id
     prev_t = samples[0].t
 
@@ -148,6 +167,7 @@ def build_path(
             # A cut is a teleport, never a pan.
             current = target
             snaps += 1
+            snap_times.append(round(sample.t, 3))
         else:
             if abs(target - current) < deadzone:
                 target = current
@@ -176,6 +196,7 @@ def build_path(
             "samples": len(samples),
             "held_frames": held,
             "shot_snaps": snaps,
+            "snap_times": snap_times,
             "shot_commit": shot_commit,
             "shots": len(anchors) if anchors else None,
             "breakpoints": len(simplified),
@@ -183,6 +204,53 @@ def build_path(
             "travel_px": round(
                 sum(abs(b[1] - a[1]) for a, b in zip(simplified, simplified[1:])), 1
             ),
+        },
+    )
+
+
+def _static_path(
+    samples: list[Sample], *, win_w: int, max_x: float, source_w: int, source_h: int
+) -> CropPath:
+    """One window for the whole clip, placed on the median subject.
+
+    The median rather than the mean: in a two-hander the detections form
+    two clusters, and the mean lands in the gap between the speakers --
+    framing neither of them. The median sits on whichever speaker holds
+    the clip, which is the one worth framing.
+    """
+    centres = [s.x_center for s in samples if s.x_center is not None]
+    if not centres:
+        return CropPath(
+            win_w, source_h, [(0.0, max_x / 2)],
+            {"mode": "static", "samples": len(samples), "shot_snaps": 0,
+             "snap_times": [], "breakpoints": 1, "max_x": max_x,
+             "travel_px": 0.0, "max_subject_offset_px": None},
+        )
+
+    ordered = sorted(centres)
+    median = ordered[len(ordered) // 2]
+    x = _clamp(median - win_w / 2, 0, max_x)
+
+    # How far the subject wanders from the centre of a window that never
+    # moves. Beyond half the window width they have left the frame.
+    offsets = [abs(c - (x + win_w / 2)) for c in centres]
+
+    return CropPath(
+        win_w,
+        source_h,
+        [(0.0, x)],
+        {
+            "mode": "static",
+            "samples": len(samples),
+            "held_frames": len(samples) - len(centres),
+            "shot_snaps": 0,
+            "snap_times": [],
+            "shots": len({s.shot_id for s in samples}),
+            "breakpoints": 1,
+            "max_x": max_x,
+            "travel_px": 0.0,
+            "max_subject_offset_px": round(max(offsets), 1),
+            "subject_left_frame": bool(max(offsets) > win_w / 2),
         },
     )
 
@@ -218,6 +286,135 @@ def crop_expression(path: CropPath, source_w: int, *, precision: int = 2) -> str
     return f"min(max({body}\\,0)\\,{source_w - path.width})"
 
 
+def render_variant_head_pad_s(variant: str, cfg: dict | None = None) -> float:
+    """Seconds this variant prepends to the picture, if any.
+
+    Single source of truth, because three things have to agree on it and
+    they are in three different files: the `tpad` that shifts the video,
+    the snap-pulse times inside the same expression, and the QC probe
+    that reads the encoded clip afterwards. The first version got the
+    latter two wrong -- pulses fired 0.5 s before their cuts.
+    """
+    cfg = cfg or {}
+    if variant == "sound_sting":
+        return float(cfg.get("sting_delay_s", 0.5))
+    return 0.0
+
+
+def _snap_pulse_term(snap_times: list[float] | None, cfg: dict) -> str:
+    """A defocus pulse centred on every shot-cut snap, or "" for none.
+
+    Each pulse is a triangle: zero outside its window, peaking exactly at
+    the cut. Rising before the cut and falling after is what makes it
+    read as a transition rather than a glitch -- the picture is already
+    softening when the change happens, so the change lands inside a
+    motion the viewer has been prepared for.
+
+    The pulses are summed rather than combined with a max(). Snaps in
+    real clips are seconds apart and the window is a quarter-second, so
+    they never overlap; a sum of disjoint triangles is the same function
+    and expresses far more cheaply in an ffmpeg expression.
+    """
+    if not snap_times or not cfg.get("snap_transition", True):
+        return ""
+
+    width = float(cfg.get("snap_transition_s", 0.24))
+    strength = int(cfg.get("snap_transition_strength", 7))
+    half = round(width / 2, 4)
+
+    pulses = "+".join(
+        f"max(0\\,1-abs(t-{round(t, 3)})/{half})" for t in snap_times
+    )
+    return f"{strength}*({pulses})"
+
+
+def render_variant_video_fragment(
+    variant: str,
+    cfg: dict | None = None,
+    *,
+    out_w: int = 1080,
+    out_h: int = 1920,
+    snap_times: list[float] | None = None,
+) -> str:
+    """The video-side filter chunk for an opening style, or "" for none.
+
+    Returned with a leading comma so it can be concatenated onto an
+    existing chain without the caller reasoning about separators; an
+    empty return therefore leaves the chain byte-identical, which is what
+    keeps ``plain`` a true no-op.
+
+    The defocus is a downscale/upscale pair rather than a blur filter, and
+    that choice was forced by measurement rather than preference:
+    ``boxblur``'s radius and ``gblur``'s sigma are both evaluated **once
+    at filter init**, so ``t`` is not even a defined constant there --
+    ffmpeg rejects the expression outright. ``scale`` with ``eval=frame``
+    is the one option that re-evaluates per frame, and it does support
+    ``t``. Measured sharpness across the ramp is smooth and monotonic
+    (2.5 -> 4.4 -> 7.9 -> 35 -> 193 -> 658 Laplacian variance).
+
+    The ease is squared on purpose. A linear ramp spends its whole budget
+    in a range where blur is already indistinguishable and then resolves
+    over a single frame, which reads as a pop rather than a pull.
+
+    ``t`` is seconds from the clip's own start: the clip is already cut by
+    ``-ss``/``-to`` before the graph sees it.
+
+    An unrecognised variant degrades to no-op rather than raising. A
+    clips.json written before a variant was renamed must still render.
+    """
+    cfg = cfg or {}
+
+    lead = ""
+    opening = ""
+    if variant == "blur_reveal":
+        seconds = float(cfg.get("reveal_duration_s", 0.6))
+        strength = int(cfg.get("reveal_strength", 11))
+        opening = f"{strength}*pow(max(0\\,1-t/{seconds})\\,2)"
+    elif variant == "sound_sting":
+        # Held flat, then released the instant the sting lands -- here the
+        # hard snap is the point. The audio half is built in s08_render,
+        # because it needs a second ffmpeg input.
+        seconds = float(cfg.get("sting_delay_s", 0.5))
+        strength = int(cfg.get("sting_strength", 12))
+        opening = f"{strength}*lt(t\\,{seconds})"
+        # The picture has to be pushed back by exactly what `adelay` does
+        # to the speech, or the whole clip plays out of lip sync -- not
+        # just the opening. Delaying only the audio was the first attempt
+        # and it desynced all 48 s of it.
+        #
+        # Padding at the *start* is what keeps them together: the frozen
+        # opening frame occupies the sting, and both streams resume real
+        # content at the same instant. Captions ride along because
+        # `ass` has already burned them in by this point in the chain.
+        lead = f"tpad=start_mode=clone:start_duration={seconds},"
+    elif variant not in ("plain", ""):
+        # Unrecognised variant: no opening, but snap pulses still apply.
+        opening = ""
+
+    # The snap transitions are folded into the *same* expression as the
+    # opening. Two scale-down/up pairs would resample every frame of the
+    # clip twice for no benefit; these are all just terms in one defocus
+    # factor, and they never overlap in time anyway.
+    # The pulses live in the same expression as the opening, so they see
+    # the timeline *after* any head padding this variant applied. The snap
+    # times come from the crop path, which knows nothing about that.
+    pad = render_variant_head_pad_s(variant, cfg)
+    shifted = [t + pad for t in (snap_times or [])]
+    snaps = _snap_pulse_term(shifted, cfg)
+    terms = [term for term in (opening, snaps) if term]
+    if not terms:
+        return ""
+
+    factor = f"(1+{'+'.join(terms)})"
+
+    # The 40 px floor keeps the intermediate from collapsing to nothing on
+    # a long hold; h=-2 keeps it even, which H.264 chroma requires.
+    return (
+        f",{lead}scale=w='max(40\\,iw/{factor})':h=-2:eval=frame"
+        f",scale={out_w}:{out_h}:flags=bicubic"
+    )
+
+
 def filtergraph(
     path: CropPath,
     *,
@@ -230,6 +427,9 @@ def filtergraph(
     logo_width: int | None = 200,
     logo_x_margin: int = 56,
     logo_y_margin: int = 72,
+    render_variant: str = "plain",
+    render_variant_cfg: dict | None = None,
+    snap_times: list[float] | None = None,
 ) -> str:
     """Compose the full filtergraph.
 
@@ -252,14 +452,22 @@ def filtergraph(
         f"ass=filename={subtitle_file}:fontsdir={fonts_dir}"
     )
 
+    # The opening effect goes last, after captions and logo, so it treats
+    # the finished frame as one image -- blurring the video but leaving a
+    # crisp caption floating on top would look like a bug, not a reveal.
+    opening = render_variant_video_fragment(
+        render_variant, render_variant_cfg, out_w=out_w, out_h=out_h,
+        snap_times=snap_times,
+    )
+
     if logo_width:
         return (
             f"{chain}[vsub];\n"
             f"[1:v]scale={logo_width}:-1[logo];\n"
             f"[vsub][logo]overlay=x=W-w-{logo_x_margin}:y={logo_y_margin}:"
-            f"format=auto:eval=init,format=yuv420p[vout]"
+            f"format=auto:eval=init{opening},format=yuv420p[vout]"
         )
-    return f"{chain},format=yuv420p[vout]"
+    return f"{chain}{opening},format=yuv420p[vout]"
 
 
 def _clamp(value: float, low: float, high: float) -> float:

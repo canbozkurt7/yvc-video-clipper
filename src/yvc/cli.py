@@ -62,8 +62,8 @@ CONFIG_KEYS = {
     "turkish": ["turkish"],
     "segment": ["segment", "llm"],
     "score": ["score", "llm", "feedback"],
-    "select": ["select", "feedback"],
-    "render": ["render", "reframe", "subtitles"],
+    "select": ["select", "feedback", "render_variant"],
+    "render": ["render", "reframe", "subtitles", "render_variant"],
     "copywrite": ["copy", "llm"],
     "schedule": ["publish"],
     "publish": ["publish"],
@@ -225,6 +225,10 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
             priors=_priors_if_enabled(config),
             exploration_ratio=config.get("feedback", {}).get(
                 "exploration_ratio", 0.20),
+            # Opening-style tagging. Assigned here so clips.json carries it
+            # and render is a pure consumer, the same shape as hook_type.
+            render_variant={**config.get("render_variant", {}),
+                            "seed": base.name},
         )
 
     elif name == "render":

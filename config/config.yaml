@@ -63,7 +63,24 @@ select:
   relax_floor: 40
 
 reframe:
-  mode: dynamic           # dynamic | static (per-shot fixed crop, the safe fallback)
+  # dynamic | static. `static` holds ONE window for the whole clip and never
+  # snaps, which removes the jump-cut class of defect the QC pass flags.
+  # It is not free and not always safe: on this source the speaker sits in a
+  # very different place before and after a cut, so a single window lets them
+  # stray 757px from centre against a 304px half-window -- they leave frame.
+  # render.json records `max_subject_offset_px` and `subject_left_frame` so
+  # that cost is visible before you ship, and the render warns out loud.
+  mode: dynamic
+  # Every crop snap this pipeline makes reads as a jump cut -- measured, not
+  # assumed: across all six snaps in the delivered clips the subject moved
+  # under 14% of frame width and changed size by under 7%, because the
+  # reframer centres the speaker at a fixed crop width. Only the background
+  # jumps, which is exactly what a jump cut is.
+  # So the cut is marked rather than hidden: a short defocus pulse peaking on
+  # it. A blur through a cut reads as an edit; a bare jump reads as a fault.
+  snap_transition: true
+  snap_transition_s: 0.24       # total pulse width, centred on the cut
+  snap_transition_strength: 7   # peak defocus; 11 is the opening blur_reveal
   sample_fps: 6
   deadzone_frac: 0.06     # wider: stops the frame chasing detector noise
   ema_alpha: 0.12
@@ -80,6 +97,25 @@ render:
   fps: 30
   audio_bitrate: 128k
   loudnorm: true
+
+# Opening-style effects for the first fraction of a second of each clip.
+# Research is consistent that 65-71% of short-form viewers decide inside
+# the first three seconds, and that a pattern interrupt -- a sudden visual
+# or audio change -- is what breaks the scroll habit. These are the
+# candidate interrupts; `plain` is the control they get compared against.
+#
+# Off by default. While disabled every clip is tagged "plain" and the
+# filtergraph is byte-identical to the pre-feature output, so turning this
+# on is an explicit decision rather than a silent change to every render.
+render_variant:
+  enabled: false
+  values: [plain, blur_reveal, sound_sting]
+  reveal_duration_s: 0.6   # blur_reveal: focus-pull length. Longer reads as a stall.
+  reveal_max_radius: 24
+  sting_delay_s: 0.5       # sound_sting: picture held blurred until the sting lands
+  sting_hold_radius: 30
+  sting_gain: 0.7          # under the speech, not over it
+  sting_asset: assets/sfx/sting_default.wav
 
 subtitles:
   vertical:   {font_size: 74, margin_v: 420, margin_x: 90, max_lines: 2, chars_per_line: 18}

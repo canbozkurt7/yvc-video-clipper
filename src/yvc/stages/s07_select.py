@@ -31,6 +31,7 @@ That choice is recorded in the output rather than left implicit.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,6 +68,11 @@ class Clip:
     text: str
     selected_reason: str = "greedy"
     notes: list[str] = field(default_factory=list)
+    # Opening-style tag, assigned after scheduling by assign_render_variants.
+    # "plain" until render_variant.enabled is turned on in config -- see
+    # that function's docstring for why this is a pure label, not a
+    # hook_type-style scheduling input.
+    render_variant: str = "plain"
 
 
 def _split_sentences(tokens: list[str]) -> list[list[int]]:
@@ -512,6 +518,42 @@ def with_exploration(
     return selection, explored
 
 
+def assign_render_variants(
+    clips: list[Clip], *, enabled: bool, values: list[str], seed: str
+) -> None:
+    """Tag each already-scheduled clip with an opening-style variant.
+
+    Phase 1 of the render_variant feature (see the plan): a fixed set of
+    real ffmpeg opening effects (plain / blur_reveal / sound_sting), no
+    learning loop yet. Deliberately NOT modelled on hook_type's
+    mechanism, because the two axes act at different times:
+
+    hook_type's multiplier changes which *window* wins during scheduling
+    (before intervals are chosen), which is why it needs top_hook_types /
+    with_exploration / a DP rebuild -- swapping a scheduled interval by
+    hand would silently break non-overlap and min_gap.
+
+    render_variant is assigned to clips that are *already* scheduled. It
+    is a pure relabelling pass: it never reads or writes `start`/`end`/
+    order, so there is no interval to conflict and nothing for a
+    scheduler to rebuild. Mutates `clips` in place.
+
+    Deterministic given `seed` (hashed per clip_id, not drawn from a
+    stateful RNG), so the same select() run always produces the same
+    assignment -- required for the fingerprint-based resume to mean
+    anything. When `enabled` is false or `values` is empty, every clip
+    keeps its "plain" default: the whole mechanism is a no-op until a
+    config flag turns it on.
+    """
+    if not enabled or not values:
+        return
+    for clip in clips:
+        digest = hashlib.sha256(
+            f"{seed}|render_variant|{clip.clip_id}".encode("utf-8")
+        ).hexdigest()
+        clip.render_variant = values[int(digest, 16) % len(values)]
+
+
 def select(
     scores_path: str | Path,
     out_path: str | Path,
@@ -527,6 +569,7 @@ def select(
     cross_format_overlap: bool = True,
     priors=None,
     exploration_ratio: float = 0.20,
+    render_variant: dict | None = None,
 ) -> dict:
     """Choose clips for each format and write clips.json."""
     vertical = vertical or {"count": 3, "min_s": 20, "max_s": 60}
@@ -647,6 +690,14 @@ def select(
                     notes=notes,
                 )
             )
+
+    rv_cfg = render_variant or {}
+    assign_render_variants(
+        clips,
+        enabled=rv_cfg.get("enabled", False),
+        values=rv_cfg.get("values", ["plain", "blur_reveal", "sound_sting"]),
+        seed=str(rv_cfg.get("seed") or Path(out_path).resolve().parent.name),
+    )
 
     payload = {
         "cross_format_overlap": cross_format_overlap,

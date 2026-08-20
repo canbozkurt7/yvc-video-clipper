@@ -29,8 +29,15 @@ from yvc.bootstrap import child_env
 from yvc.io import read_json, write_json, write_text
 from yvc.render.facetrack import detect_track, to_samples
 from yvc.render import cover as cover_mod
+from yvc.render import qc as qc_mod
 from yvc.render.fonts import resolve_font
-from yvc.render.reframe import CropPath, build_path, filtergraph
+from yvc.render.reframe import (
+    CropPath,
+    build_path,
+    filtergraph,
+    render_variant_head_pad_s,
+    render_variant_video_fragment,
+)
 from yvc.render.subtitles import Word, build_ass
 
 
@@ -45,6 +52,8 @@ class RenderResult:
     duration_s: float | None = None
     render_s: float | None = None
     crop_stats: dict = field(default_factory=dict)
+    render_variant: str | None = None
+    qc: dict = field(default_factory=dict)
     error: str | None = None
 
 
@@ -91,6 +100,47 @@ def _video_args(encoder: str, cfg: dict) -> list[str]:
     ]
 
 
+def _snap_cfg(cfg: dict) -> dict:
+    """The snap-transition knobs, which live under `reframe` in config.
+
+    Kept separate from the `render_variant` block because they describe
+    the crop path's cuts, not the clip's opening style -- the two happen
+    to share one ffmpeg expression, but they are configured apart.
+    """
+    return {
+        key: cfg[key]
+        for key in ("snap_transition", "snap_transition_s",
+                    "snap_transition_strength")
+        if key in cfg
+    }
+
+
+def _sting_audio_graph(variant: str, cfg: dict, *, loudnorm: bool) -> str | None:
+    """Audio half of ``sound_sting``, or None when the variant needs none.
+
+    Returned as filtergraph text rather than an ``-af`` string because it
+    consumes a second input file, and ``-af`` cannot reference one. When
+    this returns a graph the caller must also add the sting as an input
+    and map ``[aout]`` instead of ``0:a`` -- ``-af`` and a mapped
+    filtergraph audio output are mutually exclusive in ffmpeg.
+
+    The speech is delayed by the same interval the video holds its blur,
+    so the sting lands in the gap and the picture resolves on it.
+    """
+    if variant != "sound_sting":
+        return None
+
+    delay_ms = int(float(cfg.get("sting_delay_s", 0.5)) * 1000)
+    gain = float(cfg.get("sting_gain", 0.7))
+    norm = "loudnorm=I=-16:TP=-1.5:LRA=11" if loudnorm else "anull"
+    return (
+        f"[0:a]adelay={delay_ms}|{delay_ms},{norm}[amain];\n"
+        f"[2:a]volume={gain}[asting];\n"
+        f"[amain][asting]amix=inputs=2:duration=first:dropout_transition=0,"
+        f"aresample=48000[aout]"
+    )
+
+
 def _clip_words(transcript: dict, start: float, end: float) -> list[Word]:
     """Word timings re-based to the clip's own timeline."""
     out: list[Word] = []
@@ -127,6 +177,10 @@ def render_clip(
     aspect = clip["aspect"]
     start, end = clip["start"], clip["end"]
     duration = end - start
+    # Assigned at select time and carried in clips.json; render only reads
+    # it. Absent (an older clips.json) means the pre-feature behaviour.
+    variant = clip.get("render_variant", "plain")
+    variant_cfg = cfg.get("render_variant", {})
     workdir = out_root / clip_id
     workdir.mkdir(parents=True, exist_ok=True)
 
@@ -179,24 +233,67 @@ def render_clip(
                 ema_alpha=cfg.get("ema_alpha", 0.12),
                 max_pan_px_per_s=cfg.get("max_pan_px_per_s", 40),
                 rdp_tolerance_px=cfg.get("rdp_tolerance_px", 6),
+                # Advertised in config since the beginning and never read
+                # until now, so the "safe fallback" it promised did not
+                # actually exist.
+                mode=cfg.get("mode", "dynamic"),
             )
             crop_stats = path.stats
+            if crop_stats.get("subject_left_frame"):
+                print(
+                    f"[render]   WARNING static crop: the subject strays "
+                    f"{crop_stats['max_subject_offset_px']:.0f}px from centre, "
+                    f"beyond the {path.width // 2}px half-window -- they leave "
+                    f"the frame at some point"
+                )
             graph = filtergraph(
                 path, source_w=1920, out_w=1080, out_h=1920,
                 fps=cfg.get("fps", 30),
                 logo_width=brand["logo"]["width_px_vertical"],
                 logo_x_margin=brand["logo"]["margin_x"],
                 logo_y_margin=brand["logo"]["margin_y"],
+                render_variant=variant,
+                render_variant_cfg={**variant_cfg, **_snap_cfg(cfg)},
+                # Mark every cut instead of trying to hide it. See
+                # _snap_pulse_term in yvc.render.reframe.
+                snap_times=crop_stats.get("snap_times", []),
             )
         else:
+            # Same composition order as the 9:16 path: the opening effect
+            # is applied to the finished frame, after captions and logo.
+            # 16:9 is never reframed, so it has no crop snaps to mark --
+            # only the opening variant applies.
+            opening = render_variant_video_fragment(
+                variant, variant_cfg, out_w=1920, out_h=1080
+            )
             graph = (
                 f"[0:v]fps={cfg.get('fps', 30)},scale=1920:1080:flags=bicubic,setsar=1,"
                 f"ass=filename=sub.ass:fontsdir=fonts[vsub];\n"
                 f"[1:v]scale={brand['logo']['width_px_horizontal']}:-1[logo];\n"
                 f"[vsub][logo]overlay=x=W-w-{brand['logo']['margin_x']}:"
-                f"y={brand['logo']['margin_y']}:format=auto:eval=init,"
+                f"y={brand['logo']['margin_y']}:format=auto:eval=init{opening},"
                 f"format=yuv420p[vout]"
             )
+        # --- opening effect, audio half -------------------------------
+        # Only sound_sting needs one. It brings a second input file with
+        # it, so the audio moves out of -af and into the filtergraph.
+        sting_path: Path | None = None
+        audio_graph = _sting_audio_graph(
+            variant, variant_cfg, loudnorm=cfg.get("loudnorm", True)
+        )
+        if audio_graph:
+            asset = Path(variant_cfg.get("sting_asset", "assets/sfx/sting_default.wav"))
+            if not asset.is_absolute():
+                asset = Path.cwd() / asset
+            if asset.exists():
+                sting_path = asset
+                graph = f"{graph};\n{audio_graph}"
+            else:
+                # Degrade to the visual half rather than failing the clip:
+                # a missing bundled asset must not cost a deliverable.
+                print(f"[render]   sting asset not found ({asset}); "
+                      "rendering the visual half only")
+                audio_graph = None
         write_text(workdir / "fg.txt", graph)
 
         # --- encode ---------------------------------------------------
@@ -204,12 +301,33 @@ def render_clip(
             ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
             "-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", str(source),
             "-i", str(logo_path),
+        ]
+        if sting_path:
+            cmd += ["-i", str(sting_path)]
+        cmd += [
             "-filter_complex_script", "fg.txt",
-            "-map", "[vout]", "-map", "0:a",
+            "-map", "[vout]",
+            "-map", "[aout]" if sting_path else "0:a",
             *_video_args(encoder, cfg),
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11" if cfg.get("loudnorm", True) else "anull",
+        ]
+        if not sting_path:
+            # With a mapped filtergraph audio output, -af is rejected;
+            # loudnorm already lives inside the graph in that case.
+            cmd += [
+                "-af",
+                "loudnorm=I=-16:TP=-1.5:LRA=11"
+                if cfg.get("loudnorm", True) else "anull",
+            ]
+        cmd += [
             "-c:a", "aac", "-b:a", cfg.get("audio_bitrate", "128k"),
             "-ar", "48000", "-ac", "2",
+        ]
+        if sting_path:
+            # The two streams no longer end on the same sample: tpad and
+            # adelay each round differently. Without this the container
+            # advertises a duration a fraction longer than the video.
+            cmd += ["-shortest"]
+        cmd += [
             "-movflags", "+faststart", "-max_muxing_queue_size", "2048",
             "clip.mp4",
         ]
@@ -243,6 +361,23 @@ def render_clip(
             brand=brand, duration=duration, ffmpeg=ffmpeg, wav_path=wav_path,
         )
 
+        # --- QC: look at the picture we just produced -----------------
+        # A zero exit code says ffmpeg did not crash, not that the clip is
+        # watchable. See yvc.render.qc.
+        qc_report = qc_mod.check_clip(
+            workdir / "clip.mp4",
+            crop_stats.get("snap_times", []),
+            clip_id=clip_id,
+            # A variant may pad the head of the video, putting every snap
+            # that much later in the encoded file than in the crop path.
+            # Same helper the filter expression uses, so the two cannot
+            # drift apart.
+            time_offset=render_variant_head_pad_s(variant, variant_cfg),
+            model_path=str(assets / "models" / "face_detection_yunet_2023mar.onnx"),
+        )
+        for note in qc_report.notes:
+            print(f"[render]   QC {note}")
+
         return RenderResult(
             clip_id=clip_id,
             aspect=aspect,
@@ -253,6 +388,8 @@ def render_clip(
             duration_s=round(duration, 2),
             render_s=round(time.time() - started, 1),
             crop_stats=crop_stats,
+            render_variant=variant,
+            qc=qc_report.as_dict(),
         )
 
     except Exception as exc:  # one clip's failure must not end the run
@@ -348,6 +485,9 @@ def render_all(
     base = Path(base)
     cfg_all = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     render_cfg = {**cfg_all.get("render", {}), **cfg_all.get("reframe", {})}
+    # Nested rather than merged: the variant block has its own keys and
+    # flattening it would let a name collide with a reframe setting.
+    render_cfg["render_variant"] = cfg_all.get("render_variant", {})
     brand = read_json(brand_path)
 
     clips = read_json(base / "clips.json")["clips"]
@@ -361,7 +501,12 @@ def render_all(
     out_root = base / "clips"
     results: list[RenderResult] = []
     for clip in clips:
-        print(f"[render] {clip['clip_id']} {clip['aspect']} {clip['duration']}s ...")
+        variant = clip.get("render_variant", "plain")
+        print(
+            f"[render] {clip['clip_id']} {clip['aspect']} {clip['duration']}s"
+            + (f" [{variant}]" if variant != "plain" else "")
+            + " ..."
+        )
         result = render_clip(
             clip,
             source=base / "source.mp4",
