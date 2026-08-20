@@ -153,6 +153,12 @@ committed: together they are ~110 MB of per-platform binaries, and yt-dlp
 goes stale within weeks as YouTube changes its player. Re-run it with
 `--force` when downloads start failing.
 
+`yvc scorecard <video_id> [segment_id]` renders one segment's rubric
+as a readable scorecard: the 45/55 split, each criterion's raw
+measurement next to the score it earned, the model's written rationale
+and its verbatim evidence quote. Defaults to the highest-scoring
+segment.
+
 `doctor` is the gate. It probes ffmpeg's filters, the `claude` CLI's
 invocation form, font glyph coverage for `ç ğ ı İ ö ş ü`, and free disk,
 and prints exactly what is missing. If it passes, a full run will not

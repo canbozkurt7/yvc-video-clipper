@@ -34,6 +34,63 @@ yapıldığını biliyor, iki kez iş yapmıyor.
 
 ---
 
+## Ekranda ne olacak — aşamalar arkaplanda çalışıyor
+
+Aşamaların **çalışmasını** göstermiyorsunuz. Her aşamanın bıraktığı
+**kanıtı** gösteriyorsunuz, bir iddianın delili olarak. Boru hattı zaten
+her adımda denetlenebilir bir dosya bırakıyor; video o dosyaları
+okunabilir hale getirmekten ibaret.
+
+| Aşama | Ekranda | Neyi kanıtlıyor |
+|---|---|---|
+| acquire | `[acquire] 1920x1080 @50fps`, dosya boyutu | Kaynak gerçekten 1080p indi (Deno olmadan sessizce 360p olurdu) |
+| transcribe | ilerleme satırı: `RTF 1.16x ETA 38m` | Süre tahmini yapıyor, sessizce beklemiyor |
+| turkish | `diacritic density 82.6/1000 -> ok` | Türkçe doğruluğu iddia değil, ölçüm |
+| segment | `1507 parça -> 37 segment` | LLM sınır seçiyor, zaman damgası üretmiyor |
+| **score** | **`yvc scorecard`** (aşağıda) | Rubrik savunulabilir |
+| select | `using real word timings (10583 words)` + `1 segment dropped -- hook not locatable` | Hook bulunamayınca klip **üretmiyor** |
+| render | `QC transitioned at 20.7s` | Görüntü kontrol ediliyor, sadece exit code değil |
+| copywrite | `posts.json` içindeki `evidence_quote` | Metin uydurmuyor |
+| publish | `publish/PUBLISH_PROOF.md` | Gönderilecek payload hazır, gönderilmedi |
+| collect | `provenance_detail` alanları | Gerçek/simüle alan bazında etiketli |
+| feedback | `feedback.json` içindeki `n_eff`, çarpan | Döngü kapalı ve sınırlı |
+
+### Hook motoru için: skor kartı
+
+`scores.json` her şeyi taşıyor ama iç içe JSON olarak — bu "kayıtlı mı?"
+sorusuna cevap verir, "bu segment neden kazandı?" sorusuna vermez. Onun
+için ayrı bir görünüm var:
+
+```powershell
+.venv\Scripts\yvc.exe scorecard r39OrneyMDs seg_007
+```
+
+Ekranda tek sayfada: 45/55 ayrımı, her kriterin **ölçülen ham değeri**
+(`8.691 dB p95-median`), kazandığı puan, bar grafiği, modelin **yazılı
+gerekçesi** ve **birebir alıntısı**.
+
+**Üç çekim, bu sırayla:**
+
+1. **Kazanan** — `scorecard r39OrneyMDs seg_007` → 60.7/100, PASS
+2. **Kaybeden** — `scorecard r39OrneyMDs seg_029` → 35.9/100, eşik altı
+
+   Sayı ancak karşılaştırmayla anlam kazanıyor. Fark tam olarak görünür:
+   `hook_3s` 6.0 → 2.0, `standalone` 5.0 → 2.0, `numeric_density`
+   3.2 → 0.0. "Model seçti" değil, nerede kaybettiği okunuyor.
+
+3. **Klibi oynat** — konuşmacı, ekranda `EVIDENCE` altında yazan cümleyi
+   söylüyor.
+
+Bu üçlü iddia → kanıt → doğrulama zinciri. JSON turu değil.
+
+`seg_007`'nin `evidence_not_verbatim` bayrağı taşıması bir kusur değil,
+gösterilecek bir şey: model kendi alıntısını parafraz etmiş, sistem bunu
+işaretlemiş ve seçim aşaması gerçek zaman damgasını bulanık eşleştirmeyle
+bulmuş. **35 segmentin 19'unda** bu oluyor — yani bulanık eşleştirme bir
+süsleme değil, zorunluluk.
+
+---
+
 ## Çekim listesi
 
 ### 0:00–0:30 · Ne olduğu
@@ -89,7 +146,8 @@ Sonra `posts.json` — platform başına metin, ve **`evidence_quote`**:
 > üretemez — şema onu reddeder."
 
 ### 4:45–6:00 · Hook motoru — savunulabilirlik
-Ekran: `scores.json`, tek bir segmentin skoru açık.
+Ekran: `yvc scorecard` — kazanan, sonra kaybeden, sonra klip.
+Ayrıntı için yukarıdaki "Hook motoru için: skor kartı" bölümü.
 
 Brief "model seçti"yi geçerli cevap saymıyor. Cevabı burada verin:
 

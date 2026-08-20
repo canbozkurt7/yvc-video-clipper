@@ -264,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
     command = argv.pop(0)
     if command == "doctor":
         return doctor()
+    if command == "scorecard":
+        return scorecard(argv)
     if command != "run":
         print(f"unknown command {command!r}")
         return 2
@@ -347,6 +349,36 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"yvc: complete. cumulative stage time {total / 60:.1f} min")
     print(f"artifacts: {base}")
+    return 0
+
+
+def scorecard(argv: list[str]) -> int:
+    """Show why one segment scored what it did.
+
+    The rubric is recorded in scores.json but only as nested JSON, which
+    answers "is it written down" rather than "why did this win". This
+    renders it as something a person can read -- and check, since the
+    evidence quote is meant to be verified against the clip's audio.
+    """
+    from yvc.report.scorecard import show
+
+    video_id = argv[0] if argv else None
+    segment_id = argv[1] if len(argv) > 1 else None
+
+    if not video_id:
+        runs = sorted(Path("work").glob("*/scores.json"))
+        if not runs:
+            print("usage: yvc scorecard <video_id> [segment_id]")
+            return 2
+        video_id = runs[-1].parent.name
+        print(f"(no video given, using {video_id})\n")
+
+    config_path = Path("config/config.yaml")
+    threshold = None
+    if config_path.exists():
+        threshold = _load_config(config_path).get("score", {}).get("threshold")
+
+    print(show(Path("work") / video_id, segment_id, threshold=threshold))
     return 0
 
 
