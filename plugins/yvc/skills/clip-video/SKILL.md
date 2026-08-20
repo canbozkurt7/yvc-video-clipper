@@ -36,14 +36,19 @@ repo), clone it instead and run `tools/install.ps1` from the clone.
 The installer is idempotent — running it on an existing checkout just
 pulls and re-verifies, so prefer running it over guessing at state.
 
-It reports three prerequisites it cannot install itself. If any are
-missing, **stop and tell the user**, with the exact command:
+It installs the three prerequisites that cannot ship in a git repo —
+Python 3.12 (3.13 has no wheel for the pinned CTranslate2), ffmpeg with
+libass, and the `claude` CLI — via winget and npm.
 
-| Missing | Fix |
-|---|---|
-| Python 3.12 | `winget install Python.Python.3.12` — 3.13 does not work, the pinned CTranslate2 has no 3.13 wheel |
-| ffmpeg | `winget install Gyan.FFmpeg` — must include libass or captions cannot be burned in |
-| `claude` CLI | `npm i -g @anthropic-ai/claude-code`, then sign in. It is the LLM engine; no API key is involved |
+One thing is left to the user, and it blocks the run: **signing in to
+`claude`**. It is a browser round-trip. If `yvc doctor` reports the CLI
+as failing, **stop and tell the user to run `claude` once and sign in**;
+do not try to work around it, and do not look for an API key — there
+isn't one, the CLI is the LLM engine.
+
+If the installer could not install something (no winget, or a locked-down
+machine), it says so per item rather than failing obscurely. Report what
+it said verbatim.
 
 ## Step 2 — run doctor before a long run
 
@@ -65,7 +70,8 @@ If it fails, fix what it names before running anything else.
 Set expectations **before** starting, because this is slow and the user
 should not think it has hung:
 
-- **~2–2.8 hours** wall-clock for a 60-minute source on a 4-core laptop.
+- **~1h50m** wall-clock for a 60-minute source on a 4-core laptop,
+  measured; transcription is 52 min of it.
 - Transcription alone is 60–90 minutes and dominates everything else.
 - Output is buffered. Silence is not failure. Do not kill the run to
   "check on it" — resume works, but a killed run wastes real time.

@@ -8,26 +8,37 @@ neyin eksik olacağını bilmeniz gerektiği anlamına gelir.
 
 ## Kurulum (yeni makinede, tek seferlik)
 
-Önce sistem gereksinimleri — bunlar `pip`'in getiremeyeceği şeyler:
+Windows'ta üç komut:
 
-| Gereksinim | Nasıl |
-|---|---|
-| Python 3.12 | 3.13 **çalışmaz**; sabitlenmiş CTranslate2 sürümü desteklemiyor |
-| ffmpeg + ffprobe | `libass`, `fontconfig`, `freetype` ile derlenmiş olmalı. Windows'ta `winget install Gyan.FFmpeg` |
-| `claude` CLI | `npm i -g @anthropic-ai/claude-code`, sonra oturum açın. LLM motoru bu; API anahtarı kullanılmıyor |
-
-Sonra:
-
-```bash
-git clone <repo-url> && cd yvc
-python -m venv .venv
-./.venv/Scripts/python.exe -m pip install -e .
-./.venv/Scripts/python.exe tools/bootstrap.py
-./.venv/Scripts/yvc.exe doctor
+```powershell
+git clone https://github.com/canbozkurt7/yvc-video-clipper.git
 ```
+```powershell
+powershell -ExecutionPolicy Bypass -File yvc-video-clipper/tools/install.ps1
+```
+```powershell
+claude
+```
+
+`install.ps1` yapabileceği her şeyi yapıyor: Python 3.12, ffmpeg ve
+`claude` CLI'ı (winget + npm ile) kurar, yt-dlp ve Deno'yu indirir,
+venv'i oluşturup paketi kurar, gerçek importlarla doğrular ve `doctor`
+çalıştırır. Idempotent — mevcut bir kurulumda tekrar çalıştırmak güvenli.
+
+Üçüncü komut yalnızca **`claude`'a giriş yapmak** için: tarayıcı üzerinden
+kimlik doğrulaması, betikten yapılamaz. Kurulumdaki tek manuel adım bu.
+
+Python veya ffmpeg'i başka bir şeyle yönetiyorsanız `-NoInstall`
+geçirin; o zaman kurmaz, sadece eksikleri bildirir.
 
 `doctor` geçiyorsa kurulum bitmiştir. Geçmiyorsa neyin eksik olduğunu
 tam olarak yazar — tahmin etmeniz gerekmez.
+
+Çalıştırma:
+
+```powershell
+.venv\Scripts\yvc.exe run "https://www.youtube.com/watch?v=<id>"
+```
 
 ### Whisper modeli
 İlk `run` sırasında Hugging Face'ten **otomatik iner**. `config.yaml`
@@ -55,7 +66,7 @@ Bu tabloyu bir kez okuyun; iki makine arasında kaybolan tek şey burada.
 
 | Yol | Ne | İkinci makinede ne olur |
 |---|---|---|
-| `work/` | ~1 GB kaynak video, transkript, render edilmiş klipler | Yok. Yeni `run` sıfırdan üretir (~2–2.8 saat) |
+| `work/` | ~1 GB kaynak video, transkript, render edilmiş klipler | Yok. Yeni `run` sıfırdan üretir (~1 sa 50 dk) |
 | `.yvc/yvc.db` | **Öğrenilen durum:** klipler, hook skorları, metrikler, prior anlık görüntüleri | Boş başlar |
 | `.yvc/llm_cache/` | LLM yanıt önbelleği | Boş başlar; çağrılar yeniden ücretlenir (süre olarak) |
 | `.venv/`, `wheels/`, `tools/bin/` | Ortam ve ikili dosyalar | Kurulum adımları yeniden üretir |
@@ -110,14 +121,14 @@ gerçek koşu, 60 dakikalık kaynak video, `small` int8:
 | copywrite | 14 dk |
 | **toplam** | **~1 sa 50 dk** |
 
-`cpu_threads` fiziksel çekirdek sayısına eşit olmalı — hyperthreading /
-SMT bu int8 iş yükünde kazanç vermiyor:
+**`cpu_threads` için bir şey yapmanız gerekmez.** Varsayılan `auto`:
+çalıştığı makinenin **fiziksel** çekirdek sayısını okuyor (bu laptopta 4,
+Ryzen 5 3500X'te 6). Mantıksal değil fiziksel, çünkü bu int8 iş yükü
+yürütme birimlerini zaten doyuruyor ve SMT kardeşleri katkı yerine
+çekişme üretiyor.
 
-```yaml
-whisper:
-  cpu_threads: 4    # i5-1135G7 (4 fiziksel)
-  # cpu_threads: 6  # Ryzen 5 3500X (6 fiziksel, SMT yok)
-```
+Elle sabitlemek isterseniz `config.yaml`'a bir tamsayı yazmanız yeterli;
+açık değer her zaman otomatiği geçersiz kılar.
 
 ### Neden `small`, neden daha büyüğü değil
 

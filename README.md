@@ -25,6 +25,49 @@ credentials exist.
 
 ---
 
+## Quick start
+
+On a fresh Windows machine, three commands:
+
+```powershell
+git clone https://github.com/canbozkurt7/yvc-video-clipper.git
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File yvc-video-clipper/tools/install.ps1
+```
+
+```powershell
+claude
+```
+
+The installer handles everything it can: Python 3.12, ffmpeg, the
+`claude` CLI, yt-dlp, Deno, the virtualenv, the package, then `doctor`.
+The third command exists only to **sign in to `claude`** — a browser
+round-trip that cannot be scripted, and the one manual step in the whole
+setup.
+
+Then run a video:
+
+```powershell
+cd yvc-video-clipper
+```
+
+```powershell
+.venv\Scripts\yvc.exe run "https://www.youtube.com/watch?v=<id>"
+```
+
+Nothing after that needs a keystroke. No config file needs editing —
+`cpu_threads` resolves to the machine's physical core count on its own.
+Publishing defaults to dry-run, so this is safe to run end to end before
+any social credentials exist.
+
+Output lands in `work/<video_id>/`: the clips under `clips/`, the
+per-platform copy in `posts.json`, the report in `report/`, and the
+publish payloads in `publish/`.
+
+---
+
 ## Requirements
 
 | Tool | Notes |
@@ -63,7 +106,7 @@ Then clip a video by asking in plain language, or:
 ```
 
 The skill locates or installs a working checkout, runs `doctor`, sets
-expectations about the ~2–2.8 hour runtime, and reports what came out. It
+expectations about the ~1h50m runtime, and reports what came out. It
 deliberately installs the checkout **outside** the plugin cache: a run
 writes ~1 GB into `work/`, and a plugin update would wipe it.
 
@@ -84,9 +127,13 @@ It creates the virtualenv, installs the package, fetches yt-dlp and Deno,
 and runs `doctor`. If pip cannot reach PyPI (TLS interception — see below)
 it falls back to the curl-based wheelhouse automatically.
 
-It cannot install three things, and reports them with exact commands
-instead of failing obscurely: **Python 3.12**, **ffmpeg built with
-libass**, and an authenticated **`claude` CLI**.
+It also installs the three prerequisites that cannot ship in a git repo —
+**Python 3.12**, **ffmpeg**, and the **`claude` CLI** — via winget and
+npm. Pass `-NoInstall` to have them reported rather than installed, for
+machines where those are managed by something else.
+
+The only step left to a human is **signing in to `claude`**: run it once
+and authenticate in the browser. Nothing else in setup is manual.
 
 ---
 
@@ -117,9 +164,24 @@ Then:
 ```
 
 Publishing defaults to dry-run, so this is safe to execute end to end
-with no credentials configured. Expect ~2–2.8 hours wall-clock on a
-4-core laptop for a 60-minute source; transcription dominates. Nothing
-in the run requires a keystroke.
+with no credentials configured. Nothing in the run requires a keystroke.
+
+Measured on a 4-core 15 W laptop, 60-minute source:
+
+| Stage | Time |
+|---|---|
+| acquire (729 MiB) | 14 min |
+| **transcribe** | **52 min** (`small`, int8, RTF 1.16) |
+| segment + score (LLM) | 24 min |
+| render (5 clips) | 4 min |
+| copywrite | 14 min |
+| **total** | **~1 h 50 min** |
+
+Transcription is half the run and is memory-bandwidth bound, not
+compute bound: `small` → `medium` is 2.2× the parameters but 10× the
+time. That is why `small` is forced rather than chosen here. See
+[docs/IKINCI-MAKINE.md](docs/IKINCI-MAKINE.md) for the per-tier
+measurements and the two routes to `large-v3`.
 
 ### If pip cannot reach PyPI
 
