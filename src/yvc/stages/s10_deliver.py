@@ -346,12 +346,18 @@ def _feedback(base: Path, config: dict) -> None:
         field_name: _zscore_within_platform(metric_rows, field_name)
         for field_name in HQS_WEIGHTS
     }
+    # Provenance is measured per field, not asserted per row. A real
+    # YouTube row is always MIXED -- the API returns no impression count --
+    # so a row-level label would reject every genuine observation the
+    # pipeline can collect. See feedback.priors.real_hqs_weight.
+    from yvc.feedback.priors import real_hqs_weight
+
     outcomes = [
         Outcome(
             hook_type=row.hook_type,
             hqs=sum(w * z[k][row.post_id] for k, w in HQS_WEIGHTS.items()),
             age_days=0.0,
-            provenance="SIMULATED",
+            real_hqs_weight=real_hqs_weight(row.provenance_detail, HQS_WEIGHTS),
         )
         for row in metric_rows
     ]
@@ -366,19 +372,45 @@ def _feedback(base: Path, config: dict) -> None:
         print(f"[feedback] {len(historical)} historical outcomes loaded from hook DB")
     combined = historical + outcomes
 
+    # Only measured outcomes move the multipliers. Simulated rows still
+    # reach the report, where they are labelled -- but learning from the
+    # simulator would mean learning back its own hook-type assumptions,
+    # which is circular and would look exactly like a working loop.
+    from yvc.feedback.priors import MIN_REAL_HQS_WEIGHT, teaching_outcomes
+
+    teaching = teaching_outcomes(combined)
+    excluded = len(combined) - len(teaching)
+    print(
+        f"[feedback] {len(teaching)}/{len(combined)} outcomes teach "
+        f"(need >= {MIN_REAL_HQS_WEIGHT:.2f} of HQS weight measured)"
+    )
+
     hook_types = sorted({o.hook_type for o in combined})
-    priors = compute_priors(combined, hook_types, seed=base.name)
+    priors = compute_priors(teaching, hook_types, seed=base.name)
+
+    if teaching:
+        warning = (
+            f"{len(teaching)} measured outcomes drive these multipliers; "
+            f"{excluded} simulated or partially measured outcomes were excluded."
+        )
+    else:
+        warning = (
+            "No outcome carries enough measured signal yet, so every "
+            "multiplier is exactly 1.0 and scoring is unaffected. Publish "
+            "clips and collect real metrics to give the loop something to "
+            "learn from."
+        )
 
     payload = {
         "params": priors.params,
         "priors": priors.as_rows(),
+        "teaching_outcomes": len(teaching),
+        "excluded_outcomes": excluded,
+        "min_real_hqs_weight": MIN_REAL_HQS_WEIGHT,
         "note": "Multipliers feed the next video's hook scoring: "
                 "S(c) = M(hook) * sum(w_j * s_j). Bounded to [0.80, 1.25] so "
                 "a learned preference tilts ranking without dictating it.",
-        "provenance_warning": (
-            "Derived from simulated metrics; treat as a mechanism "
-            "demonstration, not a validated preference."
-        ),
+        "provenance_warning": warning,
     }
     write_json(base / "feedback.json", payload)
 

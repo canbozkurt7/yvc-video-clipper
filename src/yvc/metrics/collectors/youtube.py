@@ -199,6 +199,17 @@ class YouTubeCollector:
                 out[field_name] = int(row[source_name])
         if "annotationClickThroughRate" in row:
             out["ctr"] = round(float(row["annotationClickThroughRate"]), 5)
+
+        # Derived, not simulated. Every component above is measured, so
+        # handing engagement_rate to the simulator would throw away real
+        # signal -- and it is 0.20 of the HQS composite the feedback loop
+        # learns from, the difference between 70% and 90% real coverage.
+        views = out.get("views")
+        if views:
+            interactions = sum(
+                out.get(name, 0) for name in ("likes", "comments", "shares")
+            )
+            out["engagement_rate"] = round(interactions / views, 5)
         return out
 
     def _retention(self, client, headers, video_id, start, end, duration_s) -> dict:

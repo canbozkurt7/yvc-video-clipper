@@ -31,6 +31,7 @@ That choice is recorded in the output rather than left implicit.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -430,6 +431,87 @@ def schedule_non_overlapping(
     return chosen
 
 
+def top_hook_types(priors, limit: int = 2) -> set[str]:
+    """The hook types currently being *favoured*, if any.
+
+    Only types the loop has actually learned to prefer count. Ranking by
+    multiplier alone is wrong when nothing has been measured: every
+    multiplier is then exactly 1.0, ``sorted`` still returns a top two,
+    and the quota starts displacing high-scoring clips to "explore"
+    alternatives to a preference that does not exist. Observed doing
+    precisely that -- it swapped a 60.9 clip set for one containing a
+    31.1.
+    """
+    if priors is None or not getattr(priors, "priors", None):
+        return set()
+    favoured = [p for p in priors.priors.values() if p.multiplier > 1.0]
+    if not favoured:
+        return set()
+    favoured.sort(key=lambda p: p.multiplier, reverse=True)
+    return {p.hook_type for p in favoured[:limit]}
+
+
+def conflicts(window: Window, chosen: list[Window], min_gap_s: float) -> bool:
+    return any(
+        window.start < other.end + min_gap_s
+        and other.start < window.end + min_gap_s
+        for other in chosen
+    )
+
+
+def exploration_quota(count: int, ratio: float = 0.20) -> int:
+    """How many of `count` slots must go to non-exploited hook types."""
+    if count <= 0:
+        return 0
+    return max(1, math.ceil(ratio * count))
+
+
+def with_exploration(
+    pool: list[Window],
+    picked: list[Window],
+    *,
+    count: int,
+    min_gap_s: float,
+    exploited: set[str],
+    ratio: float = 0.20,
+) -> tuple[list[Window], list[Window]]:
+    """Reserve slots for hook types outside the current top two.
+
+    Bounds and Thompson sampling both damp runaway convergence but
+    neither prevents it: a type that never gets posted never accumulates
+    evidence, so its multiplier decays toward neutral rather than being
+    disproved, and the exploited types keep winning on score alone. This
+    quota is the guard that actually forces the comparison to happen.
+
+    Returns (selection, explored). The selection is rebuilt through the
+    same scheduler rather than swapped by hand, because swapping picked
+    windows silently breaks the non-overlap and min_gap guarantees the
+    scheduler exists to provide.
+    """
+    if not exploited or count <= 0:
+        return picked, []
+
+    need = exploration_quota(count, ratio)
+    already = [w for w in picked if w.hook_type not in exploited]
+    if len(already) >= need:
+        return picked, []
+
+    explore_pool = [w for w in pool if w.hook_type not in exploited]
+    if not explore_pool:
+        return picked, []
+
+    explored = schedule_non_overlapping(explore_pool, need, min_gap_s=min_gap_s)
+    if not explored:
+        return picked, []
+
+    remaining = [w for w in pool if not conflicts(w, explored, min_gap_s)]
+    filler = schedule_non_overlapping(
+        remaining, count - len(explored), min_gap_s=min_gap_s
+    )
+    selection = sorted(explored + filler, key=lambda w: w.start)
+    return selection, explored
+
+
 def select(
     scores_path: str | Path,
     out_path: str | Path,
@@ -443,6 +525,8 @@ def select(
     relax_floor: float = 40.0,
     min_gap_s: float = 5.0,
     cross_format_overlap: bool = True,
+    priors=None,
+    exploration_ratio: float = 0.20,
 ) -> dict:
     """Choose clips for each format and write clips.json."""
     vertical = vertical or {"count": 3, "min_s": 20, "max_s": 60}
@@ -514,6 +598,18 @@ def select(
             active -= relax_step
             relaxations[aspect] = active
 
+        exploited = top_hook_types(priors)
+        picked, explored = with_exploration(
+            pool, picked, count=spec["count"], min_gap_s=min_gap_s,
+            exploited=exploited, ratio=exploration_ratio,
+        )
+        explored_keys = {(w.segment_id, w.start, w.end) for w in explored}
+        if explored:
+            print(
+                f"[select] {aspect}: {len(explored)} slot(s) reserved for "
+                f"exploration outside {sorted(exploited)}"
+            )
+
         for window in picked:
             # The overlay is only shown when the opening actually says it.
             # Roughly the first three seconds, which is all the viewer gives
@@ -543,6 +639,11 @@ def select(
                     evidence_quote=window.evidence_quote,
                     source_segment=window.segment_id,
                     text=window.text,
+                    selected_reason=(
+                        "exploration_quota"
+                        if (window.segment_id, window.start, window.end)
+                        in explored_keys else "greedy"
+                    ),
                     notes=notes,
                 )
             )

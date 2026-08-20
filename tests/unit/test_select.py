@@ -231,3 +231,140 @@ def test_overlay_rejected_when_it_promises_another_claim():
 
 def test_overlay_of_only_function_words_is_rejected():
     assert not overlay_matches_opening("bu ve bir", "bu ve bir seyler")
+
+
+# --- exploration quota ------------------------------------------------
+# One of three designed guards against runaway convergence, and the only
+# one that was never written. Bounds and Thompson sampling damp the
+# effect; neither forces the comparison to actually happen. A hook type
+# that stops being posted stops accumulating evidence, so its multiplier
+# decays toward neutral instead of being disproved.
+
+from yvc.stages.s07_select import (  # noqa: E402
+    conflicts,
+    exploration_quota,
+    top_hook_types,
+    with_exploration,
+)
+
+
+class FakePrior:
+    def __init__(self, hook_type, multiplier):
+        self.hook_type = hook_type
+        self.multiplier = multiplier
+
+
+class FakePriors:
+    def __init__(self, **types):
+        self.priors = {k: FakePrior(k, v) for k, v in types.items()}
+
+
+def typed(start, end, score, hook_type, seg="seg_x") -> Window:
+    window = w(start, end, score, seg)
+    window.hook_type = hook_type
+    return window
+
+
+def test_quota_is_at_least_one_slot():
+    assert exploration_quota(3) == 1
+    assert exploration_quota(2) == 1
+    assert exploration_quota(10) == 2
+    assert exploration_quota(0) == 0
+
+
+def test_top_types_are_the_ones_being_exploited():
+    priors = FakePriors(contrarian=1.20, data_number=1.10, question=0.90)
+    assert top_hook_types(priors) == {"contrarian", "data_number"}
+
+
+def test_no_priors_means_nothing_is_exploited():
+    assert top_hook_types(None) == set()
+    assert top_hook_types(FakePriors()) == set()
+
+
+def test_a_reserved_slot_goes_to_a_non_exploited_type():
+    pool = [
+        typed(0, 20, 90, "contrarian"), typed(30, 50, 88, "contrarian"),
+        typed(60, 80, 86, "contrarian"), typed(90, 110, 40, "story"),
+    ]
+    picked = schedule_non_overlapping(pool, 3, min_gap_s=5.0)
+    assert {p.hook_type for p in picked} == {"contrarian"}
+
+    selection, explored = with_exploration(
+        pool, picked, count=3, min_gap_s=5.0,
+        exploited={"contrarian", "data_number"},
+    )
+    assert len(explored) == 1
+    assert explored[0].hook_type == "story"
+    assert len(selection) == 3
+    assert any(s.hook_type == "story" for s in selection)
+
+
+def test_the_quota_never_breaks_non_overlap():
+    """The reason this rebuilds through the scheduler instead of swapping
+    picked windows: a hand-swap silently violates min_gap."""
+    pool = [
+        typed(0, 20, 90, "contrarian"), typed(22, 40, 88, "contrarian"),
+        typed(18, 35, 50, "story"), typed(60, 80, 45, "story"),
+    ]
+    picked = schedule_non_overlapping(pool, 2, min_gap_s=5.0)
+    selection, _ = with_exploration(
+        pool, picked, count=2, min_gap_s=5.0, exploited={"contrarian"},
+    )
+    for i, a in enumerate(selection):
+        for b in selection[i + 1:]:
+            assert a.end + 5.0 <= b.start or b.end + 5.0 <= a.start
+
+
+def test_quota_is_a_no_op_without_priors():
+    """Until something has been measured, selection must be exactly what
+    it is today."""
+    pool = [typed(0, 20, 90, "contrarian"), typed(30, 50, 40, "story")]
+    picked = schedule_non_overlapping(pool, 1, min_gap_s=5.0)
+    selection, explored = with_exploration(
+        pool, picked, count=1, min_gap_s=5.0, exploited=set(),
+    )
+    assert selection == picked
+    assert explored == []
+
+
+def test_an_already_diverse_selection_is_left_alone():
+    pool = [typed(0, 20, 90, "contrarian"), typed(30, 50, 80, "story")]
+    picked = schedule_non_overlapping(pool, 2, min_gap_s=5.0)
+    selection, explored = with_exploration(
+        pool, picked, count=2, min_gap_s=5.0, exploited={"contrarian"},
+    )
+    assert explored == []
+    assert selection == picked
+
+
+def test_no_alternative_type_available_keeps_the_greedy_pick():
+    """A quota that cannot be met must not empty the selection. Filling
+    the format's quota still outranks exploring."""
+    pool = [typed(0, 20, 90, "contrarian"), typed(30, 50, 80, "contrarian")]
+    picked = schedule_non_overlapping(pool, 2, min_gap_s=5.0)
+    selection, explored = with_exploration(
+        pool, picked, count=2, min_gap_s=5.0, exploited={"contrarian"},
+    )
+    assert selection == picked
+    assert explored == []
+
+
+def test_conflicts_respects_the_gap():
+    chosen = [typed(0, 20, 90, "contrarian")]
+    assert conflicts(typed(22, 40, 50, "story"), chosen, 5.0)
+    assert not conflicts(typed(26, 40, 50, "story"), chosen, 5.0)
+
+
+def test_neutral_priors_exploit_nothing():
+    """The regression: with every multiplier at 1.0, ranking still yields
+    a "top two", and the quota then displaced a 60.9-scoring clip set for
+    one containing a 31.1 -- exploring alternatives to a preference that
+    had never been learned."""
+    assert top_hook_types(FakePriors(contrarian=1.0, data_number=1.0,
+                                     question=1.0)) == set()
+
+
+def test_only_favoured_types_count_as_exploited():
+    priors = FakePriors(contrarian=1.15, data_number=1.0, question=0.85)
+    assert top_hook_types(priors) == {"contrarian"}

@@ -41,14 +41,53 @@ DEFAULT_SIGMA0 = 0.6
 DEFAULT_EXPLORE_RATIO = 0.20
 
 
+#: An outcome teaches only if this much of the HQS composite came from
+#: real measurements. `hook_retention_3s` alone carries 0.45, so this
+#: threshold is the numeric way of saying "nothing is learned without a
+#: real retention curve".
+MIN_REAL_HQS_WEIGHT = 0.60
+
+
 @dataclass
 class Outcome:
-    """One realised post: hook type, normalised performance, age."""
+    """One realised post: hook type, normalised performance, age.
+
+    ``real_hqs_weight`` is the share of the HQS weighting that came from
+    measured rather than simulated fields. It is a fraction, not a label,
+    because the row-level label cannot express what matters here: YouTube
+    returns no impression count, so a genuinely measured YouTube row is
+    always ``MIXED``. Gating on that label would discard every real
+    observation the pipeline will ever collect.
+    """
 
     hook_type: str
     hqs: float          # platform-normalised composite (z-scale, ~0 mean)
     age_days: float
-    provenance: str = "REAL"
+    real_hqs_weight: float = 1.0
+
+    @property
+    def teaches(self) -> bool:
+        return self.real_hqs_weight >= MIN_REAL_HQS_WEIGHT
+
+
+def real_hqs_weight(provenance_detail: dict | None, hqs_weights: dict) -> float:
+    """Share of the HQS weighting backed by real measurements.
+
+    ``provenance_detail`` maps field name -> REAL | SIMULATED. Fields the
+    collector never returned are absent, which counts as simulated.
+    """
+    if not provenance_detail:
+        return 0.0
+    return sum(
+        weight
+        for field_name, weight in hqs_weights.items()
+        if provenance_detail.get(field_name) == "REAL"
+    )
+
+
+def teaching_outcomes(outcomes: list[Outcome]) -> list[Outcome]:
+    """The subset allowed to move the multipliers."""
+    return [o for o in outcomes if o.teaches]
 
 
 @dataclass

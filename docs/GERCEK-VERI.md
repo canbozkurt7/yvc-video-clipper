@@ -166,3 +166,56 @@ gerçekten iyi bir klip "kaybeden" hook tipiyle bile seçilebilir —
   `views` ile takma ad yapmadık; yapsaydık ondan türeyen her oran şişerdi.
 - **A/B varyantı yok.** Her post `variant: "A"`. Aynı klibin iki farklı
   ilk 3 saniyesini test etmek bonus maddesiydi, kurulmadı.
+
+---
+
+## Geri besleme döngüsü — gerçek veri geldiğinde
+
+Yükleme ve `--from collect` tamamlandıktan sonra döngü kendiliğinden
+çalışır, ama ne beklemeniz gerektiğini bilmek önemli.
+
+### Satırlar `MIXED` görünecek ve bu doğru
+
+YouTube `impressions` ve `reach` döndürmüyor; bunları `views`'e
+alias'lamak türetilen her oranı şişirirdi, o yüzden collector kasten boş
+bırakıyor. Sonuç: **gerçek bir YouTube satırı hiçbir zaman `REAL`
+olmaz, hep `MIXED` olur.** Bakılacak yer satır etiketi değil,
+`provenance_detail` sözlüğü:
+
+```bash
+python -c "import json;r=json.load(open('work/<id>/metrics.json',encoding='utf-8'))['rows'];d=[x for x in r if x['window']=='T+24h'][0]['provenance_detail'];print({k:d.get(k) for k in ('hook_retention_3s','completion_rate','engagement_rate','ctr')})"
+```
+
+`hook_retention_3s`, `completion_rate` ve `engagement_rate` alanları
+`REAL` ise öğrenme için yeterlisiniz demektir (HQS ağırlığının %90'ı).
+
+### Öğrenme kapısı
+
+Bir sonucun çarpanları hareket ettirmesi için HQS bileşiminin en az
+**%60'ının ölçülmüş** olması gerekir. `hook_retention_3s` tek başına
+0.45 taşıdığı için bu, pratikte "gerçek tutunma eğrisi yoksa hiçbir şey
+öğrenilmez" demektir. `feedback` aşaması kaç sonucun geçtiğini basar:
+
+```
+[feedback] 4/38 outcomes teach (need >= 0.60 of HQS weight measured)
+```
+
+Simüle satırlar rapora girer ama **öğretmez**. Simülatörün retention
+modeli hook tipine koşullu olduğu için ondan öğrenmek, kendi
+varsayımını geri öğrenmek olurdu — çalışan bir döngüden ayırt edilemez
+şekilde yanlış.
+
+### Çarpanlar bir sonraki videoda devreye girer
+
+Bu, tasarım gereği. Aynı videonun kendi metriklerinden öğrenip yine
+kendini puanlaması totolojik olurdu. Sıra:
+
+1. Bu video: `--from collect` → `feedback.json` içinde `n_eff` artar,
+   çarpanlar `hook_priors_snapshot` tablosuna yazılır
+2. **Sonraki video:** `score` aşaması `load_priors()` ile bunları okur,
+   `scores.json` içinde `multiplier` ve `multiplier_basis` dolu gelir
+3. `select` aşaması top-2 dışı hook tiplerine %20 slot ayırır
+   (`selected_reason: "exploration_quota"`)
+
+Kapatmak için `config/config.yaml` → `feedback.apply_priors: false`.
+İki rubrik sürümünü kıyaslarken bunu kapatmak istersiniz.

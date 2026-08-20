@@ -26,6 +26,29 @@ from pathlib import Path
 import yvc.bootstrap  # noqa: F401  (UTF-8 side effects, must import first)
 from yvc.io import read_json, write_json
 
+
+def _priors_if_enabled(config: dict, announce: str = ""):
+    """Load learned hook multipliers, or None when switched off.
+
+    This is the read side of the feedback loop. It was missing entirely:
+    priors were computed, persisted and never read back, so every run
+    scored as though nothing had ever been measured.
+    """
+    if not config.get("feedback", {}).get("apply_priors", True):
+        return None
+    from yvc.db.store import load_priors
+
+    priors = load_priors()
+    if announce:
+        learned = [p for p in priors.priors.values() if p.multiplier != 1.0]
+        print(
+            f"[{announce}] hook priors: {len(learned)} learned multiplier(s)"
+            if learned else
+            f"[{announce}] hook priors: none learned yet, rubric alone"
+        )
+    return priors
+
+
 STAGES = [
     "acquire", "transcribe", "turkish", "segment", "score",
     "select", "render", "copywrite", "schedule", "publish",
@@ -38,8 +61,8 @@ CONFIG_KEYS = {
     "transcribe": ["whisper"],
     "turkish": ["turkish"],
     "segment": ["segment", "llm"],
-    "score": ["score", "llm"],
-    "select": ["select"],
+    "score": ["score", "llm", "feedback"],
+    "select": ["select", "feedback"],
     "render": ["render", "reframe", "subtitles"],
     "copywrite": ["copy", "llm"],
     "schedule": ["publish"],
@@ -180,9 +203,11 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
         from yvc.llm.claude_cli import ClaudeCLI
         from yvc.stages.s06_score import score_segments
 
+        priors = _priors_if_enabled(config, announce="score")
         score_segments(base / "segments.json", base / "audio16k_raw.wav",
                        base / "scores.json",
-                       llm=ClaudeCLI.from_config(config.get("llm")))
+                       llm=ClaudeCLI.from_config(config.get("llm")),
+                       priors=priors)
 
     elif name == "select":
         from yvc.stages.s07_select import select
@@ -194,6 +219,12 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
             transcript_path=base / "transcript.json",
             vertical=cfg.get("vertical"), horizontal=cfg.get("horizontal"),
             threshold=config.get("score", {}).get("threshold", 55),
+            # Selection needs the priors too, but for the opposite reason
+            # scoring does: to know which hook types are being exploited
+            # so it can reserve slots for the ones that are not.
+            priors=_priors_if_enabled(config),
+            exploration_ratio=config.get("feedback", {}).get(
+                "exploration_ratio", 0.20),
         )
 
     elif name == "render":

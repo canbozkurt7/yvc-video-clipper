@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -112,6 +112,13 @@ class ScoredSegment:
     evidence_quote: str
     rationale: str
     flags: list[str]
+    # The rubric score before any learned multiplier, the multiplier
+    # applied, and the evidence behind it. Without these three, a score
+    # months from now cannot be reconstructed, and "the model picked it"
+    # is exactly the answer the rubric exists to avoid.
+    base_total: float = 0.0
+    multiplier: float = 1.0
+    multiplier_basis: dict = field(default_factory=dict)
 
 
 def _read_wav_window(path: str | Path, start: float, end: float) -> np.ndarray:
@@ -200,8 +207,15 @@ def score_segments(
     llm: ClaudeCLI | None = None,
     model: str | None = "sonnet",
     limit: int | None = None,
+    priors=None,
 ) -> dict:
-    """Score every segment and write scores.json."""
+    """Score every segment and write scores.json.
+
+    ``priors`` carries what previous videos measured: a bounded per
+    hook-type multiplier. Pass ``None`` to score on the rubric alone.
+    With no measured history every multiplier is exactly 1.0, so the
+    learned term is inert until real metrics exist.
+    """
     data = read_json(segments_path)
     segments = data["segments"]
     if limit:
@@ -281,9 +295,22 @@ def score_segments(
         for name in ("hook_3s", "curiosity_gap", "emotional_charge", "standalone", "audience_fit"):
             criteria[name] = _entry(None, getattr(judged, name), name, None, method="llm")
 
-        total = sum(
+        base_total = sum(
             c["score"] / 10.0 * RUBRIC[name][0] for name, c in criteria.items()
         )
+        # Sampled rather than mean: the posterior stays wide for rarely
+        # used hook types, so they periodically draw high and get retried
+        # instead of being locked out by one bad early result.
+        multiplier = (
+            priors.multiplier(judged.hook_type, sampled=True) if priors else 1.0
+        )
+        basis = {}
+        if priors is not None:
+            prior = priors.priors.get(judged.hook_type)
+            if prior is not None:
+                basis = {"n_eff": prior.n_eff, "y_hat": prior.y_hat,
+                         "mean_multiplier": prior.multiplier}
+        total = base_total * multiplier
 
         flags = []
         if text_sig.numeric_per_100w >= 4:
@@ -301,6 +328,9 @@ def score_segments(
                 start=seg["start"],
                 end=seg["end"],
                 total=round(total, 2),
+                base_total=round(base_total, 2),
+                multiplier=round(multiplier, 4),
+                multiplier_basis=basis,
                 criteria=criteria,
                 hook_type=judged.hook_type,
                 hook_line=judged.hook_line,
@@ -312,11 +342,12 @@ def score_segments(
         print(
             f"[score] {seg['id']} {seg['start']:7.1f}-{seg['end']:7.1f}s "
             f"total={total:5.1f} type={judged.hook_type}"
+            + (f" (x{multiplier:.3f})" if multiplier != 1.0 else "")
         )
 
     scored.sort(key=lambda s: s.total, reverse=True)
     payload = {
-        "rubric_version": "hook_v1",
+        "rubric_version": "hook_v2",
         "rubric": {k: {"weight": v[0], "method": v[1]} for k, v in RUBRIC.items()},
         "deterministic_weight": sum(w for w, k in RUBRIC.values() if k == "deterministic"),
         "llm_weight": sum(w for w, k in RUBRIC.values() if k == "llm"),

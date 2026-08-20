@@ -309,6 +309,37 @@ blank cell. See [docs/GERCEK-VERI.md](docs/GERCEK-VERI.md).
 
 ---
 
+## The feedback loop
+
+Realised performance becomes a bounded per-hook-type multiplier that
+scales the next video's rubric score: `S(c) = M(hook) · Σ wⱼ·sⱼ(c)`,
+with `M` clipped to `[0.80, 1.25]`. A genuinely good clip carrying a
+"losing" hook type still outranks a mediocre one — the learned signal
+tilts the ranking, it never dictates it.
+
+**Only measured outcomes teach.** The gate is the share of the HQS
+composite backed by real data, not the row's provenance label. That
+distinction is load-bearing: YouTube returns no impression count, so a
+genuinely measured YouTube row is always `MIXED`, and gating on the label
+would silently discard every real observation the pipeline can collect.
+`hook_retention_3s` alone carries 0.45 of HQS against a 0.60 threshold,
+which is the arithmetic way of saying nothing is learned without a real
+retention curve. Learning from the simulator is refused outright — its
+retention model is conditioned on hook type, so it would only teach back
+its own assumptions while looking exactly like a working loop.
+
+Until real metrics exist every multiplier is exactly `1.0` and scoring is
+byte-identical to the rubric alone.
+
+Three guards keep one hook type from winning forever: the bounds above,
+Thompson sampling (rarely-used types keep a wide posterior and
+periodically draw high), and a 20% exploration quota reserving slots for
+types outside the current top two, tagged `selected_reason:
+"exploration_quota"` so the report can separate exploration from
+exploitation.
+
+---
+
 ## Troubleshooting
 
 **`UnicodeEncodeError` on Turkish text** — something bypassed

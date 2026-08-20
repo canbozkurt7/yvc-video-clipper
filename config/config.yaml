@@ -117,6 +117,10 @@ metrics:
 
 feedback:
   enabled: true
+  # Whether scoring consumes what previous videos measured. Turning this
+  # off makes a run reproducible against the rubric alone, which is what
+  # you want when comparing two rubric versions.
+  apply_priors: true
   recency_tau_days: 90
   shrinkage_k: 8
   eta: 0.35

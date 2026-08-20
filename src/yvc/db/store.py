@@ -327,7 +327,7 @@ def load_outcomes(db_path: str | Path = DEFAULT_PATH, window: str = "T+24h") -> 
     This is the read side of the loop: without it, each run would start
     from a blank slate and the feedback design would be decorative.
     """
-    from yvc.feedback.priors import Outcome
+    from yvc.feedback.priors import Outcome, real_hqs_weight
     from yvc.report.analysis import HQS_WEIGHTS, MetricRow, _zscore_within_platform
 
     if not Path(db_path).exists():
@@ -338,6 +338,7 @@ def load_outcomes(db_path: str | Path = DEFAULT_PATH, window: str = "T+24h") -> 
             """
             SELECT m.post_id, p.platform, p.clip_id, c.hook_type,
                    m.hook_retention_3s, m.completion_rate, m.engagement_rate, m.ctr,
+                   m.provenance_detail,
                    julianday('now') - julianday(m.collected_at) AS age_days
             FROM metrics m
             JOIN posts p ON p.post_id = m.post_id
@@ -365,15 +366,68 @@ def load_outcomes(db_path: str | Path = DEFAULT_PATH, window: str = "T+24h") -> 
         field: _zscore_within_platform(metric_rows, field) for field in HQS_WEIGHTS
     }
     ages = {r["post_id"]: (r["age_days"] or 0.0) for r in rows}
+    detail = {}
+    for r in rows:
+        try:
+            detail[r["post_id"]] = json.loads(r["provenance_detail"] or "{}")
+        except (TypeError, ValueError):
+            detail[r["post_id"]] = {}
 
     return [
         Outcome(
             hook_type=row.hook_type,
             hqs=sum(w * z[k][row.post_id] for k, w in HQS_WEIGHTS.items()),
             age_days=ages.get(row.post_id, 0.0),
+            real_hqs_weight=real_hqs_weight(detail.get(row.post_id), HQS_WEIGHTS),
         )
         for row in metric_rows
     ]
+
+
+def load_priors(db_path: str | Path = DEFAULT_PATH):
+    """Read the newest multiplier per hook type.
+
+    This is the half of the loop that was missing: priors were computed,
+    persisted and never read back, so every run scored as though nothing
+    had ever been learned. An absent database or empty table yields empty
+    priors, and ``HookPriors.multiplier`` returns exactly 1.0 for an
+    unknown hook type -- so a first run is unaffected by design.
+    """
+    from yvc.feedback.priors import HookPrior, HookPriors
+
+    if not Path(db_path).exists():
+        return HookPriors()
+
+    with connect(db_path) as conn:
+        try:
+            rows = conn.execute(
+                """
+                SELECT hook_type, n_eff, y_bar, y_hat, sigma,
+                       multiplier, sampled_multiplier, params,
+                       MAX(created_at) AS created_at
+                FROM hook_priors_snapshot
+                GROUP BY hook_type
+                """
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return HookPriors()
+
+    priors = {
+        r["hook_type"]: HookPrior(
+            hook_type=r["hook_type"],
+            n_eff=r["n_eff"], y_bar=r["y_bar"], y_hat=r["y_hat"],
+            sigma=r["sigma"], multiplier=r["multiplier"],
+            sampled_multiplier=r["sampled_multiplier"],
+        )
+        for r in rows
+    }
+    params = {}
+    if rows:
+        try:
+            params = json.loads(rows[0]["params"] or "{}")
+        except (TypeError, ValueError):
+            params = {}
+    return HookPriors(priors=priors, params=params)
 
 
 def stats(db_path: str | Path = DEFAULT_PATH) -> dict:
