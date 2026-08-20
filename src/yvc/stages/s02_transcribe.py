@@ -59,7 +59,9 @@ class TranscribeConfig:
     fallback_ladder: list[str] = field(
         default_factory=lambda: ["large-v3", "medium", "small"]
     )
-    cpu_threads: int = 4
+    # "auto" resolves to the machine's physical core count; see
+    # resolve_cpu_threads. An explicit int overrides it.
+    cpu_threads: int | str = "auto"
     num_workers: int = 1
     beam_size: int = 1
     language: str = "tr"
@@ -69,6 +71,39 @@ class TranscribeConfig:
     min_speech_ms: int = 250
     min_silence_ms: int = 700
     speech_pad_ms: int = 200
+
+
+def physical_cores() -> int | None:
+    """Physical core count, or None if it cannot be determined."""
+    try:
+        import psutil
+
+        return psutil.cpu_count(logical=False)
+    except Exception:
+        return None
+
+
+def resolve_cpu_threads(setting, physical: int | None = None) -> int:
+    """How many threads to give CTranslate2.
+
+    ``"auto"`` (or nothing) means the machine's physical core count, so
+    moving the checkout to a different box does not silently leave cores
+    idle. An explicit number always wins -- auto-detection must not
+    override a deliberate choice.
+
+    Physical rather than logical on purpose: this is an int8 GEMM
+    workload that already saturates the execution units, so SMT siblings
+    contend for them instead of adding throughput.
+    """
+    if isinstance(setting, int) and not isinstance(setting, bool) and setting > 0:
+        return setting
+    if physical is None:
+        physical = physical_cores()
+    if not physical or physical < 1:
+        return 4
+    # Past a point whisper stops scaling and the extra threads just
+    # contend for memory bandwidth, which is the real bottleneck.
+    return min(physical, 16)
 
 
 def choose_model(cfg: TranscribeConfig) -> tuple[str, str | None]:
@@ -168,7 +203,8 @@ def transcribe(
             f"({len(committed)} segments already committed)"
         )
 
-    print(f"[transcribe] loading {model_name} ({cfg.compute_type}) ...")
+    threads = resolve_cpu_threads(cfg.cpu_threads)
+    print(f"[transcribe] loading {model_name} ({cfg.compute_type}, {threads} threads) ...")
     if downgrade:
         print(f"[transcribe] WARNING downgraded model: {downgrade}")
 
@@ -186,7 +222,7 @@ def transcribe(
 
     # Probe out-of-process first so a native crash costs a subprocess
     # rather than the run.
-    probed = [c for c in ladder if probe_model(c, cfg.compute_type, cfg.cpu_threads)]
+    probed = [c for c in ladder if probe_model(c, cfg.compute_type, threads)]
     if not probed:
         raise RuntimeError(
             f"no model in {ladder} could be loaded; free more memory and retry"
@@ -207,7 +243,7 @@ def transcribe(
                 candidate,
                 device="cpu",
                 compute_type=cfg.compute_type,
-                cpu_threads=cfg.cpu_threads,
+                cpu_threads=threads,
                 num_workers=cfg.num_workers,
             )
             if candidate != cfg.model:

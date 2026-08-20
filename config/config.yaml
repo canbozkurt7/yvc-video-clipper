@@ -13,7 +13,10 @@ whisper:
   # Stepped down automatically if the RAM preflight fails, and the downgrade
   # is recorded in quality_report.json so a run is never silently degraded.
   fallback_ladder: [large-v3, medium, small]
-  cpu_threads: 4
+  # "auto" = this machine's physical core count, so moving the checkout to
+  # another box needs no edit. SMT siblings are excluded on purpose: this is
+  # an int8 GEMM workload that already saturates the execution units.
+  cpu_threads: auto
   num_workers: 1
   beam_size: 1
   language: tr

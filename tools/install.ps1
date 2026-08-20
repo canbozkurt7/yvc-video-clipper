@@ -3,16 +3,21 @@
   Set up the YVC pipeline on this machine. Idempotent: safe to re-run.
 
 .DESCRIPTION
-  Clones (or updates) the repo, creates a virtualenv, installs the package,
-  fetches yt-dlp and Deno, and runs `yvc doctor`.
+  Installs the prerequisites (Python 3.12, ffmpeg, the claude CLI), clones
+  or updates the repo, creates a virtualenv, installs the package, fetches
+  yt-dlp and Deno, and runs `yvc doctor`.
 
-  Three prerequisites cannot be installed from here and are only reported:
-  Python 3.12, ffmpeg built with libass, and an authenticated `claude` CLI.
+  Everything is automated except signing in to `claude`, which is a browser
+  round-trip. Run `claude` once and sign in before the first video.
+
+  Pass -NoInstall to report missing prerequisites instead of installing
+  them.
 
 .EXAMPLE
   ./tools/install.ps1
   ./tools/install.ps1 -Dest D:\work\yvc
   ./tools/install.ps1 -Source \path\to\existing\checkout
+  ./tools/install.ps1 -NoInstall
 #>
 [CmdletBinding()]
 param(
@@ -28,7 +33,12 @@ param(
     # repo on a machine without git credentials.
     [string]$Source = '',
 
-    [switch]$SkipDoctor
+    [switch]$SkipDoctor,
+
+    # Report missing prerequisites instead of installing them. For machines
+    # where Python or ffmpeg are managed by something else and winget would
+    # install a second, conflicting copy.
+    [switch]$NoInstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,9 +47,31 @@ function Ok($m)   { Write-Host "  OK    $m" -ForegroundColor Green }
 function Warn($m) { Write-Host "  WARN  $m" -ForegroundColor Yellow }
 function Bad($m)  { Write-Host "  MISS  $m" -ForegroundColor Red }
 
-# --- prerequisites we can only report ---------------------------------
+# --- prerequisites ------------------------------------------------------
+# These three cannot ship in a git repo -- a Python runtime, an ffmpeg
+# build, and an npm package -- but "cannot ship" is not the same as
+# "cannot install". Earlier this step only printed the winget command and
+# left the operator to paste it, which turned a one-command setup into a
+# checklist. Now it runs them, unless -NoInstall says otherwise.
 Step 'Prerequisites'
 $missing = @()
+
+$winget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+
+function Try-Install($label, $exe, $argList) {
+    if ($NoInstall) { Warn "$label missing (-NoInstall set, skipping)"; return $false }
+    if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) {
+        Warn "$label missing and $exe is unavailable; install it by hand"
+        return $false
+    }
+    Write-Host "  ..    installing $label" -ForegroundColor DarkGray
+    & $exe @argList 2>&1 | Out-String | Write-Verbose
+    if ($LASTEXITCODE -ne 0) { Warn "$label install returned $LASTEXITCODE"; return $false }
+    # winget puts new shims on PATH for *future* shells, not this one.
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [Environment]::GetEnvironmentVariable('Path', 'User')
+    return $true
+}
 
 $py = $null
 foreach ($c in @('py -3.12', 'python3.12', 'python')) {
@@ -52,8 +84,18 @@ foreach ($c in @('py -3.12', 'python3.12', 'python')) {
 }
 if (-not $py) {
     Bad 'Python 3.12 not found. 3.13 will not work: the pinned CTranslate2 build has no 3.13 wheel.'
-    Write-Host '        winget install Python.Python.3.12' -ForegroundColor DarkGray
-    $missing += 'python3.12'
+    if (Try-Install 'Python 3.12' 'winget' @(
+            'install', '--id', 'Python.Python.3.12', '-e',
+            '--accept-package-agreements', '--accept-source-agreements')) {
+        foreach ($c in @('py -3.12', 'python3.12', 'python')) {
+            $exe, $arg = $c -split ' ', 2
+            if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
+            try { $v = & $exe $arg -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>$null }
+            catch { continue }
+            if ($v -eq '3.12') { $py = $c; Ok "Python 3.12 ($c)"; break }
+        }
+    }
+    if (-not $py) { $missing += 'python3.12' }
 }
 
 if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
@@ -63,15 +105,24 @@ if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     else { Bad 'ffmpeg found but built without libass; captions cannot be burned in'; $missing += 'ffmpeg-libass' }
 } else {
     Bad 'ffmpeg not found'
-    Write-Host '        winget install Gyan.FFmpeg' -ForegroundColor DarkGray
-    $missing += 'ffmpeg'
+    if (Try-Install 'ffmpeg' 'winget' @(
+            'install', '--id', 'Gyan.FFmpeg', '-e',
+            '--accept-package-agreements', '--accept-source-agreements')) {
+        if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { Ok 'ffmpeg' }
+        else { Warn 'ffmpeg installed but not yet on PATH; reopen the shell'; $missing += 'ffmpeg' }
+    } else { $missing += 'ffmpeg' }
 }
 
 if (Get-Command claude -ErrorAction SilentlyContinue) { Ok 'claude CLI' }
 else {
     Bad 'claude CLI not found (the LLM engine; no API key is used)'
-    Write-Host '        npm i -g @anthropic-ai/claude-code   # then sign in' -ForegroundColor DarkGray
-    $missing += 'claude'
+    if (Try-Install 'claude CLI' 'npm' @('i', '-g', '@anthropic-ai/claude-code')) {
+        if (Get-Command claude -ErrorAction SilentlyContinue) { Ok 'claude CLI' }
+        else { $missing += 'claude' }
+    } else { $missing += 'claude' }
+    # Signing in is a browser round-trip and cannot be scripted; it is the
+    # one genuinely manual step in the whole setup.
+    Warn 'run `claude` once and sign in before the first video'
 }
 
 if ($missing -contains 'python3.12') { throw "Cannot continue without Python 3.12." }

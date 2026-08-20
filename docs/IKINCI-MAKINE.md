@@ -66,15 +66,23 @@ Bu tabloyu bir kez okuyun; iki makine arasında kaybolan tek şey burada.
 görüntüsü. İki makinede ayrı ayrı `run` çalıştırırsanız bu iki veritabanı
 **sessizce ayrışır** ve geri besleme döngüsü iki farklı geçmişten öğrenir.
 
-Bugün için pratik risk düşük, çünkü **geri besleme döngüsü henüz kapalı
-değil**: `s06_score.py` prior'ları okumuyor, yani veritabanı şu anda
-downstream'de yalnızca yazılıyor. Ayrışma bugün hiçbir karara mal olmuyor.
-Döngü kapandığında olacak.
+> **Bu bölüm güncellendi.** Önceki hâli "risk düşük, çünkü geri besleme
+> döngüsü henüz kapalı değil" diyordu. **Artık kapalı.** `s06_score.py`
+> `load_priors()` ile öğrenilmiş çarpanları okuyor ve rubrik skorunu
+> onlarla ölçekliyor (`rubric_version: hook_v2`), `s07_select.py` de
+> keşif kotasını aynı prior'lardan türetiyor.
+
+Yani ayrışma **artık gerçek bir karara mal oluyor**: iki makine iki farklı
+geçmişten öğrenir ve aynı video farklı klipler üretebilir. Bugün çarpanlar
+hâlâ 1.0 (gerçek metrik toplanmadı), ama ilk `collect` koşusundan sonra
+değil.
 
 Üç seçenek, dürüst sırayla:
 
 1. **Tek "birincil" makine** — pipeline'ı hep aynı makinede çalıştırın,
-   diğerinde sadece kod yazın. Sıfır risk, sıfır iş. Şu an için önerilen.
+   diğerinde sadece kod yazın. Sıfır risk, sıfır iş. **Önerilen.**
+   Masaüstüne geçiyorsanız: `.yvc/yvc.db` dosyasını bir kez kopyalayın
+   ve bundan sonra hep orada çalıştırın.
 2. **Veritabanını elle taşıyın** — makine değiştirirken `.yvc/yvc.db`
    dosyasını kopyalayın. Tüm PK'lar deterministik olduğu için üzerine
    yazmak güvenlidir.
@@ -87,6 +95,78 @@ aşama parmak izleri sayesinde `run` tamamlanmış aşamaları atlar, yani
 kopyalanmış bir `work/` klasörü saatlerce transkripsiyonu geri kazandırır.
 
 ---
+
+## Donanıma göre ayar
+
+Boru hattının süresini tek bir şey belirliyor: transkripsiyon. Ölçülen
+gerçek koşu, 60 dakikalık kaynak video, `small` int8:
+
+| Aşama | Süre |
+|---|---|
+| acquire (729 MiB) | 14 dk |
+| **transcribe** | **52 dk** (RTF 1.16) |
+| segment + score (LLM) | 24 dk |
+| render (5 klip) | 4 dk |
+| copywrite | 14 dk |
+| **toplam** | **~1 sa 50 dk** |
+
+`cpu_threads` fiziksel çekirdek sayısına eşit olmalı — hyperthreading /
+SMT bu int8 iş yükünde kazanç vermiyor:
+
+```yaml
+whisper:
+  cpu_threads: 4    # i5-1135G7 (4 fiziksel)
+  # cpu_threads: 6  # Ryzen 5 3500X (6 fiziksel, SMT yok)
+```
+
+### Neden `small`, neden daha büyüğü değil
+
+Aynı makinede ölçülen model başına RTF (yüksek = hızlı):
+
+| Model | RTF | 60 dk video |
+|---|---|---|
+| `small` | 1.16 | 52 dk |
+| `medium` | 0.116 | ~8.6 saat |
+| `large-v3` | 0.094 | ~10.6 saat |
+
+`small` → `medium` parametre farkı **2.2 kat**, süre farkı **10 kat**.
+Bu, saf hesap sınırı değil **bellek bant genişliği duvarı**: model
+ağırlıkları CPU cache'ini aşınca her katman RAM'den okunuyor ve tek
+kanallı DDR4 (~21 GB/s) bunu besleyemiyor. Yani `small` bir tercih
+değil, bu donanımda tek çalışabilir seçenek.
+
+Daha güçlü bir CPU bunu **çözmüyor**, sadece ölçekliyor: Ryzen 5 3500X +
+çift kanal (~51 GB/s) `small`'ı ~22 dakikaya indirir, ama `large-v3`
+hâlâ ~4-5 saat sürer. Model kademesini yükseltmenin CPU tarafında yolu
+yok.
+
+### `large-v3` istenirse: iki yol, ikisi de sonra
+
+Karar teslimden sonraya bırakıldı. Analiz burada dursun ki yeniden
+yapılmasın:
+
+| | `large-v3` | Kurulum yükü | Maliyet |
+|---|---|---|---|
+| **Hosted Whisper API** | ~5-10 dk | `.env`'e bir anahtar | ~$0.36/video |
+| **whisper.cpp + Vulkan** | ~10-20 dk | MSVC + Vulkan SDK + CMake + kaynaktan derleme | $0 |
+
+AMD ekran kartı (RX 5600 XT) mevcut yığında **kullanılamıyor**:
+`faster-whisper`'ın altındaki CTranslate2 yalnızca CPU ve CUDA
+destekliyor, ROCm/Vulkan/DirectML yok. Doğrulandı:
+`ctranslate2.get_cuda_device_count()` → 0, desteklenen tipler yalnızca
+CPU.
+
+whisper.cpp Vulkan ile AMD'yi kullanabilir, **ama resmi Windows sürümleri
+Vulkan derlemesi içermiyor** (v1.9.3 dahil beş sürüm kontrol edildi;
+yalnızca CPU, BLAS, cuBLAS). Kaynaktan derleme şart —
+[açık issue #3673](https://github.com/ggml-org/whisper.cpp/issues/3673).
+
+Hangisi seçilirse seçilsin, önce yapılması gereken iş aynı:
+`s02_transcribe` içindeki `faster_whisper` bağımlılığını bir motor
+arayüzünün arkasına almak, `transcript.json` şemasını ve **kelime bazlı
+zaman damgalarını** aynen koruyarak. Kelime zamanları kritik: cümle
+sınırları, karaoke altyazı, hook demirleme ve `evidence_quote`
+doğrulaması hepsi onlara dayanıyor.
 
 ## Günlük akış
 

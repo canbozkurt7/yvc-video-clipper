@@ -175,7 +175,7 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
             TranscribeConfig(
                 model=whisper.get("model", "small"),
                 compute_type=whisper.get("compute_type", "int8"),
-                cpu_threads=whisper.get("cpu_threads", 4),
+                cpu_threads=whisper.get("cpu_threads", "auto"),
                 beam_size=whisper.get("beam_size", 1),
             ),
         )
