@@ -21,6 +21,7 @@ credentials exist.
 | [docs/GERCEK-VERI.md](docs/GERCEK-VERI.md) | Collecting **real** YouTube metrics |
 | [docs/DURUM.md](docs/DURUM.md) | Current state and handoff notes |
 | [docs/IKINCI-MAKINE.md](docs/IKINCI-MAKINE.md) | Setting up on a second machine, and what git deliberately does not carry |
+| [docs/DEMO.md](docs/DEMO.md) | Demo video shot list: structure, timings, what to show |
 | [NOTICE.md](NOTICE.md) | Third-party assets, licences, and what is deliberately not committed |
 
 ---
