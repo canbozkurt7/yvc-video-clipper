@@ -107,21 +107,27 @@ def wrap_lines(words: list[str], chars_per_line: int, max_lines: int = 2) -> lis
     for index, word in enumerate(words):
         addition = len(word) + (1 if current else 0)
         if current and length + addition > chars_per_line:
+            if len(lines) == max_lines - 1:
+                # This is the last line we are allowed. Everything left
+                # goes on it rather than being dropped: an overlong line
+                # is cosmetic, a missing word is a wrong caption.
+                #
+                # The earlier version started a new line here and relied
+                # on a trailing slice to enforce the cap, which deleted
+                # the tail instead of keeping it -- 106 words across the
+                # five delivered clips, and the hook overlay reduced to
+                # "150 BİN KİŞİNİN MAAŞINI" with the verb gone.
+                current.extend(range(index, len(words)))
+                break
             lines.append(current)
             current, length = [index], len(word)
-            if len(lines) == max_lines:
-                # Everything remaining is appended to the last line rather
-                # than dropped; a slightly long line beats missing speech.
-                for rest in range(index + 1, len(words)):
-                    current.append(rest)
-                break
         else:
             current.append(index)
             length += addition
 
     if current:
         lines.append(current)
-    return lines[:max_lines] if len(lines) > max_lines else lines
+    return lines
 
 
 def build_ass(
@@ -185,7 +191,7 @@ def build_ass(
     if hook_text:
         hook = tr_upper(hook_text) if uppercase else hook_text
         hook_words = hook.split()
-        hook_lines = wrap_lines(hook_words, layout["chars_per_line"] - 2, max_lines=2)
+        hook_lines = wrap_lines(hook_words, layout["chars_per_line"] - 2, max_lines=3)
         rendered = "\\N".join(
             " ".join(hook_words[i] for i in line) for line in hook_lines
         )
@@ -204,7 +210,12 @@ def build_ass(
             continue
 
         tokens = [tr_upper(w.text) if uppercase else w.text for w in group]
-        lines = wrap_lines(tokens, layout["chars_per_line"])
+        # Three lines, not two. Now that the tail is kept instead of
+        # dropped, a two-line cap has to cram it: measured across the five
+        # clips, the worst line went to 50 characters against a target of
+        # 18. A third line brings that to 38 and leaves only four lines
+        # meaningfully over, without changing caption pacing.
+        lines = wrap_lines(tokens, layout["chars_per_line"], max_lines=3)
 
         for active, word in enumerate(group):
             parts: list[str] = []
