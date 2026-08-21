@@ -24,14 +24,18 @@ Look for an existing checkout in this order:
 1. `$env:YVC_HOME`
 2. `~/yvc-video-clipper`
 
-If neither exists, install it. The installer lives beside this skill:
+If neither exists, install it. **A marketplace install only copies this
+skill's own directory into the plugin cache — it never brings the rest
+of the repo, so `tools/install.ps1` is never present next to
+`${CLAUDE_PLUGIN_ROOT}`.** Always fetch the pipeline itself from GitHub
+and run its installer from there:
 
 ```powershell
-& "${CLAUDE_PLUGIN_ROOT}/../../tools/install.ps1"
+git clone https://github.com/canbozkurt7/yvc-video-clipper.git "$HOME\yvc-video-clipper"
+& "$HOME\yvc-video-clipper\tools\install.ps1"
 ```
 
-If that path is missing (the plugin was installed without the pipeline
-repo), clone it instead and run `tools/install.ps1` from the clone.
+(Honor `$env:YVC_HOME` as the destination instead, if it is set.)
 
 The installer is idempotent — running it on an existing checkout just
 pulls and re-verifies, so prefer running it over guessing at state.
