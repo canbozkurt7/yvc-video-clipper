@@ -78,7 +78,7 @@ foreach ($c in @('py -3.12', 'python3.12', 'python')) {
     $exe, $arg = $c -split ' ', 2
     if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
     try {
-        $v = & $exe $arg -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>$null
+        $v = & $exe $arg -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
     } catch { continue }
     if ($v -eq '3.12') { $py = $c; Ok "Python 3.12 ($c)"; break }
 }
@@ -90,7 +90,7 @@ if (-not $py) {
         foreach ($c in @('py -3.12', 'python3.12', 'python')) {
             $exe, $arg = $c -split ' ', 2
             if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
-            try { $v = & $exe $arg -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>$null }
+            try { $v = & $exe $arg -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null }
             catch { continue }
             if ($v -eq '3.12') { $py = $c; Ok "Python 3.12 ($c)"; break }
         }
@@ -216,10 +216,10 @@ try {
     Step 'Verifying'
     $probe = (& $vpy -c @'
 import importlib.util
-missing = [m for m in ("faster_whisper", "ctranslate2", "cv2", "numpy",
-                       "pydantic", "yaml", "typer")
+missing = [m for m in ('faster_whisper', 'ctranslate2', 'cv2', 'numpy',
+                       'pydantic', 'yaml', 'typer')
            if not importlib.util.find_spec(m)]
-print(",".join(missing))
+print(','.join(missing))
 '@ 2>&1 | Out-String).Trim()
     $yvcExe = Join-Path $venv 'Scripts\yvc.exe'
     if ($probe) { throw "Dependencies missing after install: $probe`nNone of the install strategies worked. See the log above." }
