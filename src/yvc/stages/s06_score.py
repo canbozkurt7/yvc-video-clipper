@@ -30,6 +30,8 @@ from pydantic import BaseModel, Field
 
 from yvc.io import read_json, write_json
 from yvc.llm.claude_cli import ClaudeCLI, LLMError
+from yvc.llm.guard import require_success_ratio
+from yvc.llm.pool import concurrency_of, map_ordered
 from yvc.signals import text as text_signals
 
 # name -> (weight, kind). Weights total 100.
@@ -208,6 +210,7 @@ def score_segments(
     model: str | None = "sonnet",
     limit: int | None = None,
     priors=None,
+    min_success_ratio: float = 0.6,
 ) -> dict:
     """Score every segment and write scores.json.
 
@@ -222,12 +225,17 @@ def score_segments(
         segments = segments[:limit]
 
     llm = llm or ClaudeCLI()
-    scored: list[ScoredSegment] = []
 
-    for index, seg in enumerate(segments):
+    def _score_one(index: int, seg: dict) -> ScoredSegment | None:
+        """Score one segment. ``None`` means it was filtered out.
+
+        Returning rather than appending is what lets these overlap: the
+        caller reassembles in segment order, so the stable sort below
+        still breaks ties the same way on every run.
+        """
         duration = seg["end"] - seg["start"]
         if duration < 5 or not seg["text"].strip():
-            continue
+            return None
         # Word density floor. A segment with a handful of words spread over
         # a long span carries no usable speech, and an LLM asked to score it
         # will invent a plausible number rather than refuse.
@@ -237,7 +245,7 @@ def score_segments(
                 f"[score] {seg['id']} skipped: {word_count} words over "
                 f"{duration:.0f}s is too sparse to score"
             )
-            continue
+            return None
 
         samples = _read_wav_window(audio_path, seg["start"], seg["end"])
         e_raw, e_score = energy_score(samples)
@@ -279,10 +287,12 @@ def score_segments(
             text=seg["text"][:4000],
             opening=opening,
         )
+        llm_ok = True
         try:
             result = llm.complete(f"score.{seg['id']}", prompt, LLMScores, model=model)
             judged = result.data
         except LLMError as exc:
+            llm_ok = False
             print(f"[score] {seg['id']}: LLM failed ({exc}); deterministic only")
             # Neutral 5s keep the segment in contention without inventing
             # judgement it never received. The flag makes that visible.
@@ -321,29 +331,42 @@ def score_segments(
             # The model was asked for a verbatim quote; a miss means its
             # reasoning is not anchored to what was actually said.
             flags.append("evidence_not_verbatim")
+        if not llm_ok:
+            # The rationale said this in prose; a flag makes it countable,
+            # which is what the success-ratio check below reads.
+            flags.append("llm_unavailable")
 
-        scored.append(
-            ScoredSegment(
-                segment_id=seg["id"],
-                start=seg["start"],
-                end=seg["end"],
-                total=round(total, 2),
-                base_total=round(base_total, 2),
-                multiplier=round(multiplier, 4),
-                multiplier_basis=basis,
-                criteria=criteria,
-                hook_type=judged.hook_type,
-                hook_line=judged.hook_line,
-                evidence_quote=judged.evidence_quote,
-                rationale=judged.rationale,
-                flags=flags,
-            )
-        )
         print(
             f"[score] {seg['id']} {seg['start']:7.1f}-{seg['end']:7.1f}s "
             f"total={total:5.1f} type={judged.hook_type}"
             + (f" (x{multiplier:.3f})" if multiplier != 1.0 else "")
         )
+        return ScoredSegment(
+            segment_id=seg["id"],
+            start=seg["start"],
+            end=seg["end"],
+            total=round(total, 2),
+            base_total=round(base_total, 2),
+            multiplier=round(multiplier, 4),
+            multiplier_basis=basis,
+            criteria=criteria,
+            hook_type=judged.hook_type,
+            hook_line=judged.hook_line,
+            evidence_quote=judged.evidence_quote,
+            rationale=judged.rationale,
+            flags=flags,
+        )
+
+    # Segments are independent -- the deterministic signals are pure and
+    # the LLM call is the only expensive part -- so they overlap.
+    scored: list[ScoredSegment] = [
+        s
+        for s in map_ordered(_score_one, segments, concurrency_of(llm))
+        if s is not None
+    ]
+    degraded = sum(1 for s in scored if "llm_unavailable" in s.flags)
+    require_success_ratio("score", len(scored) - degraded, len(scored),
+                          min_success_ratio)
 
     scored.sort(key=lambda s: s.total, reverse=True)
     payload = {

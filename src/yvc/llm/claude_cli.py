@@ -105,6 +105,11 @@ class ClaudeCLI:
     # busy period turned into a retry storm at two minutes a throw.
     timeout_s: int = 600
     max_attempts: int = 3
+    # How many `claude` sessions the LLM stages may keep in flight. Not
+    # used by complete() itself -- each call is independent and already
+    # thread-safe -- it is the pool width the stages size themselves from.
+    # 1 keeps every stage strictly serial, as it was before.
+    concurrency: int = 1
     _resolved: list[str] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
@@ -134,6 +139,7 @@ class ClaudeCLI:
         return cls(
             timeout_s=int(cfg.get("timeout_s", 600)),
             max_attempts=int(cfg.get("max_attempts", 3)),
+            concurrency=max(1, int(cfg.get("concurrency", 1))),
             cache_dir=cache_dir,
             log_path=Path(cfg["log_path"]) if cfg.get("log_path") else None,
         )

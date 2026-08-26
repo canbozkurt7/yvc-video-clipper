@@ -158,6 +158,11 @@ def _video_id(url: str) -> str:
     return match.group(1) if match else hashlib.sha1(url.encode()).hexdigest()[:11]
 
 
+def _min_success_ratio(config: dict) -> float:
+    """How much of a stage may fall back before the run is not worth trusting."""
+    return float(config.get("runtime", {}).get("min_success_ratio", 0.6))
+
+
 def run_stage(name: str, base: Path, url: str, config: dict) -> None:
     """Dispatch one stage. Imports are local so a stage's dependencies are
     only loaded when that stage actually runs."""
@@ -194,6 +199,7 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
         segment_transcript(
             base / "transcript.json", base / "segments.json",
             llm=ClaudeCLI.from_config(config.get("llm")),
+            min_success_ratio=_min_success_ratio(config),
             window_s=cfg.get("window_s", 480), overlap_s=cfg.get("overlap_s", 90),
             min_segment_s=cfg.get("min_segment_s", 25),
             max_segment_s=cfg.get("max_segment_s", 300),
@@ -207,6 +213,7 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
         score_segments(base / "segments.json", base / "audio16k_raw.wav",
                        base / "scores.json",
                        llm=ClaudeCLI.from_config(config.get("llm")),
+                       min_success_ratio=_min_success_ratio(config),
                        priors=priors)
 
     elif name == "select":
@@ -243,6 +250,7 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
         write_copy(
             base / "clips.json", base / "posts.json",
             llm=ClaudeCLI.from_config(config.get("llm")),
+            min_success_ratio=_min_success_ratio(config),
             routing_by_aspect=config.get("publish", {}).get("routing_by_aspect"),
         )
 

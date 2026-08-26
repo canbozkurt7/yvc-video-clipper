@@ -23,6 +23,13 @@ from pydantic import BaseModel, Field
 
 from yvc.io import read_json, write_json
 from yvc.llm.claude_cli import ClaudeCLI, LLMError
+from yvc.llm.guard import require_success_ratio
+from yvc.llm.pool import concurrency_of, map_ordered
+
+def _is_failed_group(group: list[dict]) -> bool:
+    """A clip whose copy never arrived is written as a single failed row."""
+    return len(group) == 1 and group[0].get("status") == "failed"
+
 
 PLATFORM_SPECS = {
     "linkedin": {
@@ -250,6 +257,7 @@ def write_copy(
     routing_by_aspect: dict | None = None,
     llm: ClaudeCLI | None = None,
     model: str | None = "sonnet",
+    min_success_ratio: float = 0.6,
 ) -> dict:
     brand = read_json(brand_path)
     clips = read_json(clips_path)["clips"]
@@ -264,8 +272,14 @@ def write_copy(
         for name, s in PLATFORM_SPECS.items()
     )
 
-    posts: list[dict] = []
-    for clip in clips:
+    def _copy_one(index: int, clip: dict) -> list[dict]:
+        """Write one clip's copy. Returns that clip's post rows.
+
+        The two-attempt repair below stays sequential *within* a clip --
+        the second attempt is built from the first one's errors -- while
+        different clips overlap.
+        """
+        clip_posts: list[dict] = []
         link = (
             f"{brand['destination_url']}?utm_source={{platform}}&utm_medium=social_organic"
             f"&utm_campaign=datassist_clips&utm_content={clip['clip_id']}"
@@ -307,14 +321,13 @@ def write_copy(
             )
 
         if copy_obj is None:
-            posts.append({"clip_id": clip["clip_id"], "status": "failed", "issues": issues})
             print(f"[copy] {clip['clip_id']} FAILED")
-            continue
+            return [{"clip_id": clip["clip_id"], "status": "failed", "issues": issues}]
 
         targets = routing.get(clip["aspect"], list(PLATFORM_SPECS)) if routing else list(PLATFORM_SPECS)
         for platform in targets:
             block: PlatformCopy = getattr(copy_obj, platform)
-            posts.append({
+            clip_posts.append({
                 "post_id": f"{clip['clip_id']}-{platform}-A",
                 "clip_id": clip["clip_id"],
                 "variant": "A",
@@ -342,6 +355,17 @@ def write_copy(
             f"[copy] {clip['clip_id']}: 5 platforms, "
             f"{errs} errors, {len(issues) - errs} warnings"
         )
+        return clip_posts
+
+    # One call per clip, and clips do not reference each other.
+    groups = map_ordered(_copy_one, clips, concurrency_of(llm))
+    require_success_ratio(
+        "copywrite",
+        sum(1 for g in groups if not _is_failed_group(g)),
+        len(groups),
+        min_success_ratio,
+    )
+    posts: list[dict] = [post for group in groups for post in group]
 
     payload = {"posts": posts, "platform_specs": PLATFORM_SPECS}
     write_json(out_path, payload)

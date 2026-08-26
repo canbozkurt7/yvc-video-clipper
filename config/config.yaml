@@ -131,7 +131,9 @@ llm:
   model_main: sonnet
   timeout_s: 600          # measured: ~122s/call, ~99s of it time-to-first-token
   max_attempts: 3
-  concurrency: 1          # 7.7 GB RAM cannot host parallel CLI sessions
+  concurrency: 3          # parallel `claude` sessions in segment/score/copywrite.
+                          # Each is a Node process; 3 fits comfortably in 16 GB.
+                          # Set to 1 for the strictly serial behaviour.
   cache: true
 
 copy:

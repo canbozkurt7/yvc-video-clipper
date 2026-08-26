@@ -22,7 +22,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from yvc.io import read_json, write_json
-from yvc.llm.claude_cli import ClaudeCLI, LLMError
+from yvc.llm.claude_cli import ClaudeCLI, LLMError, LLMResult
+from yvc.llm.guard import require_success_ratio
+from yvc.llm.pool import concurrency_of, map_ordered
 from yvc.signals.text import sentence_boundaries
 
 
@@ -35,6 +37,19 @@ class _WindowResult(BaseModel):
     """What the model returns for one window: ids, nothing more."""
 
     boundaries: list[_Boundary]
+
+
+@dataclass
+class _WindowOutcome:
+    """What one window contributed, carried back to an ordered merge.
+
+    Both fields empty means the window was skipped for having too few
+    candidates -- a real outcome, distinct from a failure, and the reason
+    this is not just an optional result.
+    """
+
+    result: LLMResult | None = None
+    failure: dict | None = None
 
 
 @dataclass
@@ -114,6 +129,7 @@ def segment_transcript(
     max_segment_s: float = 300.0,
     gap_s: float = 0.65,
     model: str | None = "sonnet",
+    min_success_ratio: float = 0.6,
 ) -> dict:
     """Segment a transcript and write segments.json."""
     data = read_json(transcript_path)
@@ -143,14 +159,20 @@ def segment_transcript(
         starts.append(cursor)
         cursor += window_s
 
-    for index, core_start in enumerate(starts):
+    def _run_window(index: int, core_start: float) -> _WindowOutcome:
+        """One window's LLM call. Touches no shared state.
+
+        Everything read here -- boundaries, words -- is read-only, and
+        the merge is deliberately left to the caller so that arrival
+        order cannot reach segments.json.
+        """
         core_end = min(core_start + window_s, duration)
         lo = max(0.0, core_start - overlap_s)
         hi = min(duration, core_end + overlap_s)
 
         candidates = _window_candidates(boundaries, words, lo, hi)
         if len(candidates) < 3:
-            continue
+            return _WindowOutcome()
 
         expected = max(2, int((core_end - core_start) / 90))
         prompt = PROMPT.format(
@@ -168,10 +190,25 @@ def segment_transcript(
             )
         except LLMError as exc:
             print(f"[segment] window {index} failed: {exc}")
-            failed_windows.append({"window": index, "error": str(exc)[:200]})
-            continue
+            return _WindowOutcome(failure={"window": index, "error": str(exc)[:200]})
 
-        for item in result.data.boundaries:
+        print(
+            f"[segment] window {index} ({core_start:.0f}-{core_end:.0f}s): "
+            f"{len(result.data.boundaries)} boundaries"
+            f"{' [cached]' if result.cache_hit else ''}"
+        )
+        return _WindowOutcome(result=result)
+
+    # Windows are independent, so they overlap; the merge below does not.
+    outcomes = map_ordered(_run_window, starts, concurrency_of(llm))
+
+    for outcome in outcomes:
+        if outcome.failure is not None:
+            failed_windows.append(outcome.failure)
+            continue
+        if outcome.result is None:
+            continue
+        for item in outcome.result.data.boundaries:
             # An id outside the candidate set means the model invented it.
             # That invalidates the item, not the run.
             if item.id not in valid_ids:
@@ -179,11 +216,14 @@ def segment_transcript(
             votes[item.id] = votes.get(item.id, 0) + 1
             chosen.setdefault(item.id, item.title)
 
-        print(
-            f"[segment] window {index} ({core_start:.0f}-{core_end:.0f}s): "
-            f"{len(result.data.boundaries)} boundaries"
-            f"{' [cached]' if result.cache_hit else ''}"
-        )
+    # A window that fails falls back to pause splitting below, which is
+    # a fair trade for one window and meaningless for most of them.
+    require_success_ratio(
+        "segment",
+        sum(1 for o in outcomes if o.result is not None),
+        sum(1 for o in outcomes if o.result is not None or o.failure is not None),
+        min_success_ratio,
+    )
 
     # Windows that failed entirely still need boundaries, or their stretch
     # would collapse into one enormous segment. Fall back to the largest
