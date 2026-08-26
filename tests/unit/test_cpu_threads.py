@@ -12,6 +12,7 @@ than adding throughput.
 
 from __future__ import annotations
 
+from yvc.stages import s02_transcribe
 from yvc.stages.s02_transcribe import resolve_cpu_threads
 
 
@@ -27,8 +28,17 @@ def test_auto_uses_the_physical_core_count():
     assert resolve_cpu_threads(None, physical=4) == 4
 
 
-def test_auto_falls_back_when_the_count_is_unknown():
-    """psutil is an optional dependency and cpu_count can return None."""
+def test_auto_falls_back_when_the_count_is_unknown(monkeypatch):
+    """psutil is an optional dependency and cpu_count can return None.
+
+    Detection has to be stubbed to reach this path. ``physical=None``
+    means "not supplied, go and detect", not "detection came back
+    empty", so passing it alone just ran the real probe -- which
+    returned 4 on the 4-core laptop this was written on and made the
+    assertion pass for the wrong reason. On a 6-core machine it returns
+    6 and the test fails while the code is perfectly correct.
+    """
+    monkeypatch.setattr(s02_transcribe, "physical_cores", lambda: None)
     assert resolve_cpu_threads("auto", physical=None) == 4
 
 
