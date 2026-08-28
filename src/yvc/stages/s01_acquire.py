@@ -1,6 +1,6 @@
 """Download the source video and extract ASR audio.
 
-Two lessons from this video are encoded here as defaults:
+Three lessons from this video are encoded here as defaults:
 
 * **A JS runtime is required.** YouTube's n-signature challenge must be
   solved to see high-resolution formats. Without Deno on PATH, yt-dlp
@@ -14,6 +14,19 @@ Two lessons from this video are encoded here as defaults:
   even after the challenge was solved. `web_embedded` worked. Because
   which client works changes over time, the clients are tried in order
   and the one that succeeds is recorded.
+
+* **yt-dlp needs to be told where ffmpeg is.** The 1080p video and the
+  audio arrive as separate streams and have to be muxed. When ffmpeg is
+  not on the child PATH -- a winget install puts it somewhere no shell
+  ever sees -- the mux fails, yt-dlp falls back down the format list to
+  a single-file `best`, and 360p lands on disk under the right filename.
+  The failure is silent by construction: every artifact exists.
+
+That last one is why height is now a gate rather than a warning. A
+source below ``min_height`` is refused and set aside, because a 9:16
+crop out of 360p cannot be published and everything downstream of it --
+an hour of transcription, two LLM stages, the render -- is wasted work
+spent on pixels that were never there.
 """
 
 from __future__ import annotations
@@ -27,6 +40,25 @@ from yvc.io import write_json
 
 # Ordered by observed reliability for 1080p on this network.
 PLAYER_CLIENTS = ["web_embedded", "default", "tv_simply", "web_safari", "android"]
+
+# Below this the vertical crop has fewer pixels than it needs to fill a
+# 1080x1920 frame, so the run is refused rather than continued.
+DEFAULT_MIN_HEIGHT = 720
+
+
+def _ffmpeg_dir() -> str | None:
+    """Directory holding ffmpeg, for yt-dlp's ``--ffmpeg-location``.
+
+    yt-dlp resolves ffmpeg itself and needs it to mux the separate video
+    and audio streams a 1080p download arrives as. Leaving it to chance
+    is what produced a 360p source here.
+    """
+    import shutil
+
+    tools = Path("tools/bin").resolve()
+    path = str(tools) + os.pathsep + os.environ.get("PATH", "")
+    found = shutil.which("ffmpeg", path=path)
+    return str(Path(found).parent) if found else None
 
 
 def _run(cmd: list[str], timeout: int = 5400) -> subprocess.CompletedProcess:
@@ -51,6 +83,15 @@ def probe(path: Path) -> dict:
     return json.loads(result.stdout or "{}")
 
 
+def video_stream(path: Path) -> dict:
+    """Probe once and return the video stream, its container info, and
+    the height as an int -- the three things every caller here wants."""
+    info = probe(path)
+    streams = info.get("streams", [])
+    video = next((s for s in streams if s.get("codec_type") == "video"), {})
+    return {"info": info, "video": video, "height": int(video.get("height") or 0)}
+
+
 def acquire(url: str, base: Path, config: dict) -> dict:
     """Download to base/source.mp4 and extract base/audio16k_raw.wav."""
     base = Path(base)
@@ -66,13 +107,40 @@ def acquire(url: str, base: Path, config: dict) -> dict:
         "format",
         "299+140/bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/best",
     )
+    min_height = int(
+        config.get("source", {}).get("min_height") or DEFAULT_MIN_HEIGHT
+    )
+
+    if source.exists():
+        height = video_stream(source)["height"]
+        if height and height < min_height:
+            # A file under the right name is not the same as a usable
+            # source. Set it aside rather than skip the download because
+            # of it -- and keep it, since it is the evidence of what went
+            # wrong last time.
+            rejected = base / f"source.rejected-{height}p.mp4"
+            rejected.unlink(missing_ok=True)
+            source.rename(rejected)
+            print(
+                f"[acquire] existing source.mp4 is only {height}p "
+                f"(minimum {min_height}p); moved to {rejected.name}, "
+                "downloading again"
+            )
 
     used_client = None
     if not source.exists():
+        ffmpeg_dir = _ffmpeg_dir()
+        if ffmpeg_dir is None:
+            raise RuntimeError(
+                "ffmpeg not found. yt-dlp needs it to mux the separate video "
+                "and audio streams of a 1080p download; without it the format "
+                "list falls back to a single low-resolution file."
+            )
         for client in PLAYER_CLIENTS:
             cmd = [
                 yt_dlp, "--no-playlist", "--no-progress", "--newline",
                 "--format", fmt, "--merge-output-format", "mp4",
+                "--ffmpeg-location", ffmpeg_dir,
                 "--output", str(base / "source.%(ext)s"),
                 "--write-info-json", "--continue", "--no-overwrites",
                 "--retries", "10", "--fragment-retries", "10",
@@ -100,9 +168,8 @@ def acquire(url: str, base: Path, config: dict) -> dict:
     else:
         print("[acquire] source.mp4 already present; skipping download")
 
-    info = probe(source)
-    streams = info.get("streams", [])
-    video = next((s for s in streams if s.get("codec_type") == "video"), {})
+    probed = video_stream(source)
+    info, video, height = probed["info"], probed["video"], probed["height"]
     duration = float(info.get("format", {}).get("duration", 0.0))
 
     print(
@@ -111,12 +178,20 @@ def acquire(url: str, base: Path, config: dict) -> dict:
         f"{int(info.get('format', {}).get('size', 0)) / 1e6:.0f} MB"
     )
 
-    if video.get("height", 0) and int(video["height"]) < 720:
-        # Not fatal, but the vertical crop needs the pixels; say so loudly
-        # rather than silently producing soft clips.
+    if height and height < min_height:
+        # Everything downstream is expensive and none of it can add
+        # pixels back, so this is where the run stops.
+        raise RuntimeError(
+            f"source is {height}p, below the {min_height}p minimum. YouTube "
+            "serves high-resolution video and audio as separate streams: if "
+            "only 360p arrived, either Deno is missing (the n-signature "
+            "challenge went unsolved) or ffmpeg could not be found to mux "
+            "them. Both are checked by `yvc doctor`."
+        )
+    if height and height < 1080:
         print(
-            f"[acquire] WARNING source is only {video['height']}p. "
-            "Vertical 9:16 crops will be low resolution."
+            f"[acquire] NOTE source is {height}p; a 9:16 crop out of it is "
+            "upscaled to fill 1080x1920."
         )
 
     if not audio.exists():

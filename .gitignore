@@ -10,6 +10,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+# Written by `pip install -e .`, which the installer runs.
+*.egg-info/
 
 # --- vendored binaries and wheels -------------------------------------
 # `python tools/bootstrap.py` fetches these. They are ~320 MB of

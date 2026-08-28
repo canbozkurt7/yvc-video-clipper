@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import time
@@ -241,7 +242,7 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
     elif name == "render":
         from yvc.stages.s08_render import render_all
 
-        render_all(base)
+        render_all(base, min_success_ratio=_min_success_ratio(config))
 
     elif name == "copywrite":
         from yvc.llm.claude_cli import ClaudeCLI
@@ -349,6 +350,10 @@ def main(argv: list[str] | None = None) -> int:
             "status": "ok", "fingerprint": expected, "duration_s": elapsed,
             "outputs": OUTPUTS.get(name, []),
         })
+        # A stage that failed and then succeeded is not a stage that
+        # failed. Leaving the old message beside status "ok" makes the
+        # manifest read as a contradiction weeks later.
+        record.pop("error", None)
         manifest.save()
         print(f"[{name}] done in {elapsed}s\n")
 
@@ -395,10 +400,20 @@ def doctor() -> int:
     ok = True
 
     print("== binaries ==")
-    for tool in ("ffmpeg", "ffprobe"):
-        found = shutil.which(tool)
+    # The vendored binaries are what the stages themselves search first,
+    # so doctor has to search the same path or it reports on a different
+    # machine than the one the pipeline runs on.
+    search = str(Path("tools/bin").resolve()) + os.pathsep + os.environ.get("PATH", "")
+    for tool in ("ffmpeg", "ffprobe", "yt-dlp", "deno"):
+        found = shutil.which(tool, path=search)
         print(f"  {tool:10s} {'OK ' + found if found else 'MISSING'}")
         ok &= bool(found)
+    if not shutil.which("deno", path=search):
+        print("    deno solves YouTube's n-signature challenge; without it")
+        print("    only 360p formats are offered, with no error.")
+    if not shutil.which("ffmpeg", path=search):
+        print("    ffmpeg also muxes yt-dlp's separate video and audio")
+        print("    streams; without it a 1080p request lands as 360p.")
 
     print("\n== ffmpeg features ==")
     import subprocess

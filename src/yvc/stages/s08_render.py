@@ -14,6 +14,15 @@ error.
 
 A clip that fails does not stop the run. Its error is recorded and the
 remaining clips still render, because a partial deliverable beats none.
+That is per clip; in bulk it is the opposite. A render where most clips
+failed is not a partial deliverable, it is a broken environment, and it
+is refused rather than written out -- the same rule
+``runtime.min_success_ratio`` applies to the LLM stages.
+
+The flag for handing ffmpeg a filtergraph from a file is probed rather
+than hard-coded, because it changed underneath a working pipeline: this
+machine's ffmpeg went to 9.0 and ``-filter_complex_script``, removed in
+8.0, took every clip in the run down with it.
 """
 
 from __future__ import annotations
@@ -23,6 +32,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from yvc.bootstrap import child_env
@@ -55,6 +65,43 @@ class RenderResult:
     render_variant: str | None = None
     qc: dict = field(default_factory=dict)
     error: str | None = None
+
+
+def _filtergraph_option_from_probe(output: str) -> str:
+    """Read an option probe's output as a choice of flag.
+
+    Split out from the subprocess call so both branches are testable
+    against text a real ffmpeg actually printed.
+    """
+    return (
+        "-filter_complex_script"
+        if "Unrecognized option" in output
+        else "-/filter_complex"
+    )
+
+
+@lru_cache(maxsize=4)
+def filtergraph_option(ffmpeg: str = "ffmpeg") -> str:
+    """Which flag this ffmpeg takes for a filtergraph read from a file.
+
+    The graph is far too long for a Windows command line, so it lives in
+    ``fg.txt``. ``-filter_complex_script`` carried it until ffmpeg 8.0
+    removed the option in favour of the generic ``-/filter_complex``
+    (available since 7.0). Asking the binary costs one process at the
+    start of a render and survives the next rename; assuming costs every
+    clip in the run.
+    """
+    try:
+        probe = subprocess.run(
+            [ffmpeg, "-hide_banner", "-/filter_complex", "__yvc_option_probe__"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=child_env(), timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        # An ffmpeg that cannot be run at all is a failure the encode
+        # will report far better than a probe can.
+        return "-/filter_complex"
+    return _filtergraph_option_from_probe((probe.stderr or "") + (probe.stdout or ""))
 
 
 def probe_encoder(preferred: str = "libx264", ffmpeg: str = "ffmpeg") -> str:
@@ -305,7 +352,7 @@ def render_clip(
         if sting_path:
             cmd += ["-i", str(sting_path)]
         cmd += [
-            "-filter_complex_script", "fg.txt",
+            filtergraph_option(ffmpeg), "fg.txt",
             "-map", "[vout]",
             "-map", "[aout]" if sting_path else "0:a",
             *_video_args(encoder, cfg),
@@ -472,6 +519,10 @@ def _cover_fallback(workdir: Path, duration: float, ffmpeg: str) -> str | None:
     return str(workdir / "cover.jpg") if proc.returncode == 0 else None
 
 
+class RenderFailureRateError(RuntimeError):
+    """Too few clips came out of the encoder to call the render a render."""
+
+
 def render_all(
     base: str | Path,
     *,
@@ -479,6 +530,7 @@ def render_all(
     brand_path: str | Path = "config/brand.json",
     assets_dir: str | Path = "assets",
     only: list[str] | None = None,
+    min_success_ratio: float = 0.6,
 ) -> dict:
     import yaml
 
@@ -535,6 +587,24 @@ def render_all(
     }
     write_json(base / "render.json", payload)
     print(f"[render] {payload['ok']} ok, {payload['failed']} failed")
+
+    # Written first, then judged: render.json is the evidence of what
+    # went wrong, and it has to survive the exception that follows.
+    attempted = len(results)
+    if attempted and min_success_ratio > 0:
+        ratio = payload["ok"] / attempted
+        if ratio < min_success_ratio:
+            first = next(
+                (r.error for r in results if r.status != "ok" and r.error), ""
+            )
+            raise RenderFailureRateError(
+                f"render: only {payload['ok']}/{attempted} clips encoded "
+                f"({ratio:.0%}), below the {min_success_ratio:.0%} required by "
+                f"runtime.min_success_ratio. Clips are the deliverable, so a "
+                f"run that mostly failed to produce them is not a partial "
+                f"success. First error:\n"
+                f"{(first or 'none recorded').strip()[:400]}"
+            )
     return payload
 
 

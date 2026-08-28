@@ -433,9 +433,11 @@ def filtergraph(
 ) -> str:
     """Compose the full filtergraph.
 
-    Written to ``fg.txt`` and passed via ``-filter_complex_script``: a long
-    expression would otherwise risk the Windows 32,767-character command
-    line, and having it on disk makes the graph a reviewable artifact.
+    Written to ``fg.txt`` and passed by whichever file-reading flag the
+    installed ffmpeg accepts (see ``s08_render.filtergraph_option``): a
+    long expression would otherwise risk the Windows 32,767-character
+    command line, and having it on disk makes the graph a reviewable
+    artifact.
 
     ``subtitle_file`` and ``fonts_dir`` are deliberately bare relative
     names. ffmpeg runs with its working directory set to the clip folder,
