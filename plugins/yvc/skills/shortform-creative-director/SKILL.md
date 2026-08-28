@@ -1,6 +1,6 @@
 ---
 name: shortform-creative-director
-description: Turn an already-produced short-form clip (from the YVC clip pipeline, or any 30s-2min vertical/horizontal clip with a transcript and a hook) into a precise, timestamped edit-decision list -- B-roll, text, zooms, pattern interrupts, sound design -- ready for a downstream video-editing tool to execute. Use this whenever a clip already exists and the task is to decide HOW it should be edited/restyled, not to find or cut the clip in the first place. Trigger on "creative director", "edit decisions", "EDL", "B-roll opportunities", "make this clip more engaging", "restyle this clip", "Vidmoat", "WeftCut", or when a YVC run has clips.json/render.json and the next question is what to do with the finished clip.mp4. Do NOT use this to select segments from a long video or generate the clip itself -- that is a separate, upstream stage.
+description: Turn an already-produced short-form clip (from the YVC clip pipeline, or any 30s-2min vertical/horizontal clip with a transcript and a hook) into a precise, timestamped edit-decision list -- B-roll, text, zooms, pattern interrupts, sound design -- and, when a WeftCut MCP server is connected, actually build it on the WeftCut timeline (import media, place layers, keyframe, caption) rather than just describing it. Use this whenever a clip already exists and the task is to decide HOW it should be edited/restyled, not to find or cut the clip in the first place. Trigger on "creative director", "edit decisions", "EDL", "B-roll opportunities", "make this clip more engaging", "restyle this clip", "Vidmoat", "WeftCut", or when a YVC run has clips.json/render.json and the next question is what to do with the finished clip.mp4. Do NOT use this to select segments from a long video or generate the clip itself -- that is a separate, upstream stage.
 ---
 
 # Short-form video creative director
@@ -21,7 +21,11 @@ session -- it carries the platform research (YouTube/TikTok guidance, hook
 mechanisms, creator archetypes) that should shape your read of the clip.
 Read `references/interventions.md` when you're past diagnosis and choosing
 which specific intervention to use -- it has the full taxonomy, the B-roll
-and pattern-interrupt decision rules, and the scoring rubric.
+and pattern-interrupt decision rules, and the scoring rubric. Read
+`references/weftcut.md` as soon as you detect a WeftCut MCP server is
+connected (see Step 0) -- it maps every intervention type to WeftCut's
+actual tool calls, in its actual units, and names the two things WeftCut
+cannot do for you.
 
 ## Where this fits
 
@@ -32,7 +36,11 @@ long-form video -> clip generator -> 30s-2min clip + transcript + hook
                               YOU (this skill): decide edits
                                               |
                                               v
-                          video editing MCP (Vidmoat / WeftCut / etc.)
+                       WeftCut MCP: build the timeline for real
+                       (import, place, keyframe, caption -- NOT export)
+                                              |
+                                              v
+                         human clicks Export in the WeftCut UI
                                               |
                                               v
                                     final restyled clip
@@ -42,6 +50,28 @@ Everything upstream of the clip already happened. Do not re-score the hook,
 re-cut the segment boundaries, or second-guess *which* moment was chosen --
 that decision was made by a separate stage with its own defensible rubric.
 Your job starts once the clip is a fact.
+
+**The last arrow above is not automatable, and that's WeftCut's own design,
+not a gap in this skill.** Its MCP surface deliberately ships no
+`render_export` tool -- see `references/weftcut.md` &sect; the export gap
+for exactly what that means and how to hand off cleanly instead of
+pretending it isn't there.
+
+## Step 0 -- is WeftCut actually connected?
+
+Before anything else, check with ToolSearch for tool names like
+`import_media`, `add_video_layer`, `add_motif`, `apply_subtitles`, or a
+server literally named `weftcut`. This changes almost everything below:
+
+- **Connected** -- you're not just advising, you're editing. Read
+  `references/weftcut.md` now. Use WeftCut's own resources
+  (`analyze_clip`, `describe_clip`, `media://{id}/frame/{t_us}`) for Step 1
+  instead of manual ffmpeg frames -- they're already there, machine-
+  readable, and `describe_clip` gets you scene descriptions ffmpeg frames
+  alone don't. Step 4 becomes "build it," not "describe it."
+- **Not connected** -- fall back to ffmpeg frame extraction below and
+  produce the semantic EDL files only. Don't fabricate WeftCut tool calls
+  to a server that isn't there.
 
 ## Step 1 -- gather the inputs
 
@@ -69,18 +99,31 @@ hook), just not read from these specific file paths.
 **You must actually look at the video, not just the transcript.** The
 transcript tells you what was said; it says nothing about what's on
 screen, whether the frame is already doing visual work, or whether a cut
-is already there. Extract frames with ffmpeg and read them as images:
+is already there. How you look depends on Step 0:
 
-```powershell
-ffmpeg -i <clip.mp4> -vf fps=1 -q:v 3 <tmp_dir>\frame_%04d.jpg
-```
+- **WeftCut connected:** `import_media { path: clip.mp4 }` first (you need
+  the `media_id` for everything downstream anyway), then use
+  `analyze_clip` for deterministic shot boundaries + per-shot brightness/
+  motion/sharpness, `describe_clip` for scene descriptions where a video-
+  understanding backend is configured, and `media://{id}/frame/{t_us}` to
+  pull specific frames on demand (`t_us` = seconds x 1,000,000,
+  source-absolute). This is strictly better than manual sampling -- it's
+  already structured and it's free of the guesswork in picking which
+  seconds to sample.
+- **Not connected:** extract frames with ffmpeg and read them as images:
 
-One frame per second is enough to diagnose "is this static talking head or
-is something already changing on screen" for most clips; sample more
-densely (every 0.5s) around a moment you're specifically weighing an
-intervention for. Read the frames as images before deciding anything --
-skipping this step and reasoning from the transcript alone is exactly the
-failure mode this skill exists to avoid.
+  ```powershell
+  ffmpeg -i <clip.mp4> -vf fps=1 -q:v 3 <tmp_dir>\frame_%04d.jpg
+  ```
+
+  One frame per second is enough to diagnose "is this static talking head
+  or is something already changing on screen" for most clips; sample more
+  densely (every 0.5s) around a moment you're specifically weighing an
+  intervention for.
+
+Either way, read the frames as images before deciding anything -- skipping
+this step and reasoning from the transcript alone is exactly the failure
+mode this skill exists to avoid.
 
 ## Step 2 -- diagnose before deciding
 
@@ -151,13 +194,43 @@ it says the clip was reviewed, not skipped):
   the shape is `{clip_id, creative_strategy, interventions[]}` with every
   timestamp clip-relative in seconds.
 
-Write **semantic** decisions ("insert B-roll of a Tesla Model 3 driving"),
-not tool calls. The one exception: if a video-editing MCP (Vidmoat,
-WeftCut, or similar) is actually connected in this session -- check with
-ToolSearch for tool names containing those or "video edit" before you
-start -- prefer phrasing `purpose`/`query` fields in terms that tool's own
-operations can consume directly, and say in the report which tool you
-targeted. Never fabricate a tool call to a server that isn't connected.
+Write **semantic** decisions first regardless of Step 0 ("insert B-roll of
+a Tesla Model 3 driving") -- the EDL is the audit trail of what you decided
+and why, independent of whether you also went and built it.
+
+**If WeftCut is connected, also build it.** Don't stop at the EDL. Per
+`references/weftcut.md`:
+
+1. `checkpoint { label: "before creative-direction pass" }` so the whole
+   batch is one clean undo step.
+2. `lock_history { reason: "creative director editing pass" }` while you
+   work, `unlock_history()` when done -- keeps a concurrent user/agent from
+   reverting mid-batch.
+3. Translate each *kept* intervention (never the rejected ones) into the
+   matching tool call(s) from `references/weftcut.md`'s mapping table.
+   `dry_run` the batch first where the op types support it (layer adds/
+   updates/moves/splits/deletes do; motifs, captions and effects don't --
+   call those directly and verify by re-reading `project://current` after).
+4. Never fabricate a media asset. WeftCut places files that already exist
+   on disk (`import_media { path }`); it does not source B-roll from a
+   query string. An intervention whose `type` is `broll` and for which no
+   asset file is available is written to the EDL as a **recommendation**
+   with its `query`, not executed -- say so explicitly in the report
+   rather than silently skipping it or, worse, importing the wrong file to
+   avoid leaving a gap.
+
+## Step 5 -- hand off for export, explicitly
+
+Once the timeline changes are committed (or the semantic-only EDL is
+written, if WeftCut isn't connected), the run is NOT finished by producing
+a final video file -- WeftCut's MCP surface has no export tool by design
+(`references/weftcut.md` &sect; the export gap), so a human has to open the
+project and click Export. End every run, in the report, with an explicit
+line naming this as the one required human step -- e.g. "Timeline changes
+committed to WeftCut (checkpoint `<id>`). Open the project and export when
+ready; no further agent action will produce the final file." Do not imply
+the clip is done and ready to publish when what actually happened is that
+the timeline was edited.
 
 ## What "done" looks like
 

@@ -175,6 +175,14 @@ Notes on the schema:
 - Adapt field names to a specific downstream tool's schema only if that
   tool's MCP is actually connected in-session (check via ToolSearch); the
   default is tool-agnostic semantic fields as shown above.
+- When WeftCut is connected and you actually built an intervention
+  (`references/weftcut.md`), add `"executed": true` plus whatever ids the
+  tool calls returned (`"weftcut_layer_id"`, `"weftcut_checkpoint"`) to
+  that intervention's object. An intervention left as `"executed": false`
+  (or the key omitted) is a recommendation only -- most often because it
+  needed a media asset WeftCut has no way to source. This distinction is
+  what keeps the EDL honest about what actually landed on the timeline
+  versus what's still waiting on something.
 
 ## Human-readable report
 
