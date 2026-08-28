@@ -107,11 +107,11 @@ render:
 # or audio change -- is what breaks the scroll habit. These are the
 # candidate interrupts; `plain` is the control they get compared against.
 #
-# Off by default. While disabled every clip is tagged "plain" and the
-# filtergraph is byte-identical to the pre-feature output, so turning this
-# on is an explicit decision rather than a silent change to every render.
+# Enabling this is an explicit decision, not a silent change to every
+# render: while disabled every clip is tagged "plain" and the filtergraph
+# is byte-identical to the pre-feature output.
 render_variant:
-  enabled: false
+  enabled: true
   values: [plain, blur_reveal, sound_sting]
   reveal_duration_s: 0.6   # blur_reveal: focus-pull length. Longer reads as a stall.
   reveal_max_radius: 24
@@ -119,6 +119,17 @@ render_variant:
   sting_hold_radius: 30
   sting_gain: 0.7          # under the speech, not over it
   sting_asset: assets/sfx/sting_default.wav
+  # Phase 2: a genuine head-to-head test, not just a spread of effects
+  # across different clips. `count` of the highest-scoring vertical clips
+  # are each split into two clones (same content, two openings) instead
+  # of rendered once; the report then compares the two sides directly
+  # instead of comparing across different clips' content. `variants` must
+  # be exactly 2 -- "plain" as the control against one real intervention
+  # is the cleanest read for a first test.
+  ab_test:
+    enabled: true
+    count: 1
+    variants: [plain, blur_reveal]
 
 subtitles:
   vertical:   {font_size: 74, margin_v: 420, margin_x: 90, max_lines: 2, chars_per_line: 18}

@@ -253,6 +253,7 @@ def run_stage(name: str, base: Path, url: str, config: dict) -> None:
             llm=ClaudeCLI.from_config(config.get("llm")),
             min_success_ratio=_min_success_ratio(config),
             routing_by_aspect=config.get("publish", {}).get("routing_by_aspect"),
+            bilingual=config.get("copy", {}).get("bilingual", True),
         )
 
     elif name in {"schedule", "publish", "collect", "report", "feedback"}:

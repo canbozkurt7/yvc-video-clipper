@@ -61,6 +61,21 @@ WINDOW_MATURITY = {
     "T+30d": {"instagram": 1.0, "tiktok": 1.0, "linkedin": 1.0, "x": 1.0, "youtube": 1.0},
 }
 
+# A pattern interrupt at the very first frame is the specific mechanism
+# render_variant claims to improve: 65-71% of short-form viewers decide
+# inside the first three seconds, so a modelled effect belongs on exactly
+# that number, not on completion or engagement -- those are left to react
+# to a better (or worse) 3-second retention the same way they would to a
+# genuinely better hook. Numbers are a hypothesis, same status as
+# DROPOFF_3S: a stated, honest guess a real A/B run replaces with fact.
+RENDER_VARIANT_DROPOFF_DELTA = {
+    "plain": 0.0,
+    "blur_reveal": -0.03,   # focus-pull resolving into the shot: a visible
+                             # "something is arriving" beat before speech starts
+    "sound_sting": -0.02,   # an audio cue is a weaker interrupt without sound-on
+                             # by default on most short-form surfaces
+}
+
 ENGAGEMENT_STYLE = {
     "contrarian": {"comments": 1.8, "saves": 0.8, "shares": 1.3},
     "data_number": {"comments": 0.7, "saves": 1.9, "shares": 1.1},
@@ -85,6 +100,7 @@ class SimContext:
     duration_s: float
     window: str
     follower_factor: float = 1.0
+    render_variant: str = "plain"
 
 
 @dataclass
@@ -125,13 +141,18 @@ class _Rng:
         return max(0, min(n, int(round(self.normal(mean, sd)))))
 
 
-def retention_curve(hook_type: str, duration_s: float, rng: _Rng) -> list[list[float]]:
+def retention_curve(
+    hook_type: str, duration_s: float, rng: _Rng, *, render_variant: str = "plain"
+) -> list[list[float]]:
     """Two-phase curve: a hook-dependent initial cliff, then exponential decay.
 
     A small bump near the payoff point is added for narrative hook types,
     which is what a real curve shows when a story lands.
     """
-    d0 = DROPOFF_3S.get(hook_type, 0.30)
+    d0 = DROPOFF_3S.get(hook_type, 0.30) + RENDER_VARIANT_DROPOFF_DELTA.get(
+        render_variant, 0.0
+    )
+    d0 = max(0.01, min(0.95, d0))
     lam = 0.9 + 0.6 * (duration_s / 60.0)
     bump = 0.05 if hook_type in ("story", "contrarian") else 0.0
     payoff = 0.78
@@ -184,7 +205,9 @@ def simulate(ctx: SimContext, missing: set[str], real: dict | None = None) -> Si
         )
         impressions = max(50, impressions)
 
-    curve = retention_curve(ctx.hook_type, ctx.duration_s, rng)
+    curve = retention_curve(
+        ctx.hook_type, ctx.duration_s, rng, render_variant=ctx.render_variant
+    )
     r3 = _at(curve, min(1.0, 3.0 / max(ctx.duration_s, 3.0)))
     completion = curve[-1][1]
     area = sum(p[1] for p in curve) / len(curve)

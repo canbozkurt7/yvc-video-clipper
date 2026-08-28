@@ -43,6 +43,9 @@ class MetricRow:
     platform: str
     hook_type: str
     variant: str = "A"
+    render_variant: str = "plain"
+    ab_group: str | None = None
+    lang: str = "tr"
     impressions: int = 0
     views_3s: int = 0
     completion_rate: float = 0.0
@@ -61,6 +64,33 @@ class MetricRow:
             1 for f in fields if self.provenance_detail.get(f) == "REAL"
         )
         return real / len(fields)
+
+
+@dataclass
+class VariantVerdict:
+    """A vs. B for one render_variant.ab_test split.
+
+    Deliberately not a HookVerdict: that comparison pools posts from
+    *different* clips (different content, different hook), which is
+    exactly the confound this comparison exists to avoid. Every row here
+    comes from the two sides of one `ab_group` -- same transcript, same
+    hook, same platforms -- so a gap is attributable to the opening
+    effect and not to "which clip was better".
+    """
+
+    ab_group: str
+    render_variant_a: str
+    render_variant_b: str
+    n_a: int
+    n_b: int
+    hqs_a: float
+    hqs_b: float
+    winner: str | None
+    drivers: list[dict]
+    sentence_tr: str
+    confidence: str
+    caveats: list[str]
+    simulated_share: float
 
 
 @dataclass
@@ -233,3 +263,118 @@ def _simulated_share(rows: list[MetricRow]) -> float:
     if not rows:
         return 0.0
     return 1.0 - sum(r.real_fraction() for r in rows) / len(rows)
+
+
+def analyze_ab_test(rows: list[MetricRow]) -> list[VariantVerdict]:
+    """One verdict per `ab_group` present in `rows`: side A vs. side B.
+
+    Z-scoring is still done within-platform (same reasoning as `analyze`
+    -- an Instagram number and a LinkedIn number are not on the same
+    scale), but the ranking that follows groups by `variant` ("A"/"B")
+    within a single `ab_group` rather than by `hook_type` across the
+    whole run, so the two sides being compared are guaranteed to share
+    everything except the render_variant that was actually varied.
+
+    Groups with fewer than one row on each side are skipped rather than
+    guessed at -- a partially-published pair says nothing yet.
+    """
+    by_group: dict[str, list[MetricRow]] = {}
+    for row in rows:
+        if row.ab_group:
+            by_group.setdefault(row.ab_group, []).append(row)
+
+    verdicts: list[VariantVerdict] = []
+    for ab_group, group_rows in by_group.items():
+        by_variant: dict[str, list[MetricRow]] = {}
+        for row in group_rows:
+            by_variant.setdefault(row.variant, []).append(row)
+        if "A" not in by_variant or "B" not in by_variant:
+            continue
+
+        z = {f: _zscore_within_platform(group_rows, f) for f in HQS_WEIGHTS}
+        hqs = {
+            r.post_id: sum(w * z[f][r.post_id] for f, w in HQS_WEIGHTS.items())
+            for r in group_rows
+        }
+        a_rows, b_rows = by_variant["A"], by_variant["B"]
+        hqs_a = sum(hqs[r.post_id] for r in a_rows) / len(a_rows)
+        hqs_b = sum(hqs[r.post_id] for r in b_rows) / len(b_rows)
+
+        contributions = []
+        for field_name, weight in HQS_WEIGHTS.items():
+            a_z = sum(z[field_name][r.post_id] for r in a_rows) / len(a_rows)
+            b_z = sum(z[field_name][r.post_id] for r in b_rows) / len(b_rows)
+            contributions.append({
+                "metric": field_name,
+                "a_z": round(a_z, 3),
+                "b_z": round(b_z, 3),
+                "contribution": weight * (b_z - a_z),
+            })
+        gap = sum(c["contribution"] for c in contributions)
+        positive = sum(c["contribution"] for c in contributions if c["contribution"] * gap > 0)
+        for c in contributions:
+            c["share"] = (
+                round(c["contribution"] / positive, 4)
+                if positive and c["contribution"] * gap > 0 else 0.0
+            )
+            c["contribution"] = round(c["contribution"], 4)
+        contributions.sort(key=lambda c: abs(c["contribution"]), reverse=True)
+
+        simulated_share = _simulated_share(group_rows)
+        confidence = "simulated" if simulated_share > 0.5 else "observed"
+        variant_a = a_rows[0].render_variant
+        variant_b = b_rows[0].render_variant
+
+        labels = {
+            "hook_retention_3s": "3 saniye tutunma",
+            "completion_rate": "tamamlanma oranı",
+            "engagement_rate": "etkileşim oranı",
+            "ctr": "tıklama oranı",
+        }
+        if abs(hqs_a - hqs_b) < 1e-9:
+            winner = None
+            sentence = (
+                f"{ab_group}: '{variant_a}' (A) ile '{variant_b}' (B) arasında "
+                "ölçülebilir bir fark yok."
+            )
+        else:
+            winner = "A" if hqs_a > hqs_b else "B"
+            winner_variant = variant_a if winner == "A" else variant_b
+            loser_variant = variant_b if winner == "A" else variant_a
+            top = contributions[0]
+            verb = "öne çıktı" if confidence == "simulated" else "kazandı"
+            sentence = (
+                f"{ab_group}: '{winner_variant}' ({winner}) '{loser_variant}' "
+                f"karşısında {verb}. Başlıca etken — "
+                f"{labels.get(top['metric'], top['metric'])}: "
+                f"%{abs(top['share']) * 100:.0f}."
+            )
+
+        caveats = [
+            f"Örneklem küçük: A n={len(a_rows)}, B n={len(b_rows)} (gönderi, "
+            "izleyici değil).",
+            "Aynı klip içeriği, aynı platform seti -- yalnızca açılış efekti "
+            "değişti; bu yüzden hook_type karşılaştırmasından daha az yanlı, "
+            "ama tek bir video, tek bir çalıştırma.",
+        ]
+        if confidence == "simulated":
+            caveats.insert(
+                0,
+                f"Katkıda bulunan değerlerin %{simulated_share * 100:.0f}'ı "
+                "SİMÜLE. Bu sonuç yön gösterir, karar vermez.",
+            )
+
+        verdicts.append(VariantVerdict(
+            ab_group=ab_group,
+            render_variant_a=variant_a,
+            render_variant_b=variant_b,
+            n_a=len(a_rows), n_b=len(b_rows),
+            hqs_a=round(hqs_a, 4), hqs_b=round(hqs_b, 4),
+            winner=winner,
+            drivers=contributions,
+            sentence_tr=sentence,
+            confidence=confidence,
+            caveats=caveats,
+            simulated_share=round(simulated_share, 3),
+        ))
+    return verdicts

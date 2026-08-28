@@ -305,6 +305,7 @@ def write_copy(
     llm: ClaudeCLI | None = None,
     model: str | None = "sonnet",
     min_success_ratio: float = 0.6,
+    bilingual: bool = True,
 ) -> dict:
     brand = read_json(brand_path)
     clips = read_json(clips_path)["clips"]
@@ -328,10 +329,14 @@ def write_copy(
         different clips overlap.
         """
         clip_posts: list[dict] = []
+        # "A"/"B" for a clip that came out of the render_variant A/B split
+        # (see s07_select.apply_ab_test); "A" for every ordinary clip, so
+        # an untagged clips.json produces exactly the pre-feature output.
+        variant_label = clip.get("variant_label", "A")
         link = (
             f"{brand['destination_url']}?utm_source={{platform}}&utm_medium=social_organic"
             f"&utm_campaign=datassist_clips&utm_content={clip['clip_id']}"
-            f"&utm_term={clip.get('hook_type', '')}"
+            f"&utm_term={clip.get('hook_type', '')}&yvc_v={variant_label}"
         )
         prompt = PROMPT.format(
             text=clip["text"][:3500],
@@ -382,11 +387,15 @@ def write_copy(
         targets = routing.get(clip["aspect"], list(PLATFORM_SPECS)) if routing else list(PLATFORM_SPECS)
         for platform in targets:
             block: PlatformCopy = getattr(copy_obj, platform)
+            base_url = link.replace("{platform}", platform)
             clip_posts.append({
-                "post_id": f"{clip['clip_id']}-{platform}-A",
+                "post_id": f"{clip['clip_id']}-{platform}-{variant_label}",
                 "clip_id": clip["clip_id"],
-                "variant": "A",
+                "ab_group": clip.get("ab_group"),
+                "variant": variant_label,
+                "render_variant": clip.get("render_variant", "plain"),
                 "platform": platform,
+                "lang": "tr",
                 "text": block.body,
                 "hashtags": block.hashtags,
                 "cta": block.cta,
@@ -396,7 +405,7 @@ def write_copy(
                 "key_number": copy_obj.key_number,
                 "angle": copy_obj.angle,
                 "hook_type": clip.get("hook_type"),
-                "tracking_url": link.replace("{platform}", platform),
+                "tracking_url": f"{base_url}&yvc_lang=tr",
                 "char_count": len(block.body),
                 "validation": {
                     "passed": not [i for i in issues if i["severity"] == "error"],
@@ -404,6 +413,53 @@ def write_copy(
                 },
                 "status": "ok",
             })
+
+            # Bonus: the LinkedIn copy already carries a real English
+            # transcreation (`body_en`) -- it was being generated and then
+            # thrown away, since nothing downstream ever read it. Publish
+            # it as its own post rather than a field nobody consumes: same
+            # clip, same tracking scheme, a `lang`/`yvc_lang` tag so the
+            # report and attribution.csv can tell the two audiences apart.
+            # LinkedIn only: the prompt defines `body_en` as specifically
+            # the LinkedIn text's transcreation (long-form), not a second
+            # X-length draft -- posting it to X's 280-char budget as-is
+            # would just fail LEN_OVER at validation.
+            if (
+                bilingual
+                and platform == "linkedin"
+                and copy_obj.body_en
+                and copy_obj.body_en.strip()
+            ):
+                clip_posts.append({
+                    "post_id": f"{clip['clip_id']}-{platform}-{variant_label}-en",
+                    "clip_id": clip["clip_id"],
+                    "ab_group": clip.get("ab_group"),
+                    "variant": variant_label,
+                    "render_variant": clip.get("render_variant", "plain"),
+                    "platform": platform,
+                    "lang": "en",
+                    "text": copy_obj.body_en.strip(),
+                    # English audience for these two platforms is not the
+                    # same as the Turkish one; the CTA/title are language-
+                    # neutral enough here to reuse rather than invent a
+                    # second English CTA the model was never asked to
+                    # ground in the transcript.
+                    "hashtags": block.hashtags,
+                    "cta": block.cta,
+                    "title": block.title,
+                    "text_en": None,
+                    "evidence_quote": copy_obj.evidence_quote,
+                    "key_number": copy_obj.key_number,
+                    "angle": copy_obj.angle,
+                    "hook_type": clip.get("hook_type"),
+                    "tracking_url": f"{base_url}&yvc_lang=en",
+                    "char_count": len(copy_obj.body_en.strip()),
+                    "validation": {
+                        "passed": not [i for i in issues if i["severity"] == "error"],
+                        "issues": issues,
+                    },
+                    "status": "ok",
+                })
 
         errs = len([i for i in issues if i["severity"] == "error"])
         print(

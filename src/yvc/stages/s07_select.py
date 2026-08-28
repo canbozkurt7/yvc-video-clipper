@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from yvc.io import read_json, write_json
@@ -73,6 +73,14 @@ class Clip:
     # that function's docstring for why this is a pure label, not a
     # hook_type-style scheduling input.
     render_variant: str = "plain"
+    # Phase 2 of the render_variant feature: a genuine head-to-head test.
+    # `ab_group` names the original clip a pair was split from (None for
+    # every clip not part of a test); `variant_label` is the human-facing
+    # "A"/"B" side, independent of which concrete effect (`render_variant`)
+    # each side got, so the report can say "A beat B" even if the config's
+    # `values` list is later reordered or renamed.
+    ab_group: str | None = None
+    variant_label: str = "A"
 
 
 def _split_sentences(tokens: list[str]) -> list[list[int]]:
@@ -554,6 +562,73 @@ def assign_render_variants(
         clip.render_variant = values[int(digest, 16) % len(values)]
 
 
+def apply_ab_test(
+    clips: list[Clip], *, enabled: bool, count: int, variants: list[str], seed: str
+) -> list[dict]:
+    """Split the highest-scoring clip(s) into a real, controlled A/B pair.
+
+    `assign_render_variants` answers "which opening style does each clip
+    get" -- useful for spreading effects across a run, but it compares
+    different clips wearing different effects, which confounds the effect
+    with the content. A real test needs the SAME clip content rendered
+    twice, once per side, so any measured difference in the report is
+    attributable to the edit and nothing else.
+
+    Mutates `clips` in place: each chosen clip is replaced by two clones
+    (same start/end/score/hook_type/text -- everything the viewer's
+    experience of the *content* depends on) that differ only in
+    `clip_id`, `render_variant`, and `variant_label`. Every later stage
+    (render, copywrite, schedule, publish, collect) already keys off
+    `clip_id` alone, so the two sides flow through as two independent
+    clips and need no special-casing downstream.
+
+    Returns the list of test groups actually created (empty when
+    disabled, when `variants` is not exactly 2, or when there are no
+    clips to pick from), so `select()` can record what it did in
+    clips.json rather than leaving the split implicit.
+    """
+    if not enabled or len(variants) != 2 or not clips:
+        return []
+
+    # Vertical clips are where an opening pattern interrupt matters most --
+    # 9:16 platforms are pure scroll-stop surfaces, and horizontal cuts on
+    # LinkedIn/X are watched in a feed context where the first frame has
+    # already been decided for the viewer by the platform's own preview.
+    candidates = sorted(
+        (c for c in clips if c.aspect == "9:16"),
+        key=lambda c: c.score, reverse=True,
+    )
+    if not candidates:
+        candidates = sorted(clips, key=lambda c: c.score, reverse=True)
+
+    groups: list[dict] = []
+    for base_clip in candidates[: max(0, count)]:
+        clips.remove(base_clip)
+        pair_ids = []
+        for label, variant in zip(("A", "B"), variants):
+            digest = hashlib.sha256(
+                f"{seed}|ab_test|{base_clip.clip_id}|{label}".encode("utf-8")
+            ).hexdigest()[:6]
+            new_id = f"{base_clip.clip_id}{label.lower()}"
+            clone = replace(
+                base_clip,
+                clip_id=new_id,
+                render_variant=variant,
+                ab_group=base_clip.clip_id,
+                variant_label=label,
+                selected_reason=f"{base_clip.selected_reason}+ab_test",
+                notes=[*base_clip.notes, f"ab_test pair id {digest}"],
+            )
+            clips.append(clone)
+            pair_ids.append(new_id)
+        groups.append({
+            "group": base_clip.clip_id,
+            "clip_ids": pair_ids,
+            "variants": list(variants),
+        })
+    return groups
+
+
 def select(
     scores_path: str | Path,
     out_path: str | Path,
@@ -711,12 +786,24 @@ def select(
             )
 
     rv_cfg = render_variant or {}
+    seed = str(rv_cfg.get("seed") or Path(out_path).resolve().parent.name)
     assign_render_variants(
         clips,
         enabled=rv_cfg.get("enabled", False),
         values=rv_cfg.get("values", ["plain", "blur_reveal", "sound_sting"]),
-        seed=str(rv_cfg.get("seed") or Path(out_path).resolve().parent.name),
+        seed=seed,
     )
+
+    ab_cfg = rv_cfg.get("ab_test", {})
+    ab_groups = apply_ab_test(
+        clips,
+        enabled=ab_cfg.get("enabled", False),
+        count=ab_cfg.get("count", 1),
+        variants=ab_cfg.get("variants", ["plain", "blur_reveal"]),
+        seed=seed,
+    )
+    if ab_groups:
+        clips.sort(key=lambda c: c.start)
 
     payload = {
         "cross_format_overlap": cross_format_overlap,
@@ -726,6 +813,7 @@ def select(
             "9:16": sum(1 for c in clips if c.aspect == "9:16"),
             "16:9": sum(1 for c in clips if c.aspect == "16:9"),
         },
+        "ab_test": ab_groups or None,
         "clips": [c.__dict__ for c in clips],
         "dropped": {
             "hook_not_locatable": unlocatable,
@@ -755,6 +843,11 @@ def select(
         )
     if relaxations:
         print(f"[select] WARNING threshold relaxed to meet quota: {relaxations}")
+    for group in ab_groups:
+        print(
+            f"[select] A/B test: {group['group']} split into "
+            f"{' vs '.join(group['clip_ids'])} ({' vs '.join(group['variants'])})"
+        )
     print(f"[select] {len(clips)} clips -> {out_path}")
     return payload
 

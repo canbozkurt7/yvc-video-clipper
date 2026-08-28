@@ -145,7 +145,59 @@ def _drivers_table(drivers: list[dict]) -> str:
     )
 
 
-def render_report(base: Path, rows: list[dict], verdict, config: dict) -> Path:
+def _ab_test_block(ab_verdicts: list) -> str:
+    if not ab_verdicts:
+        return ""
+
+    labels = {
+        "hook_retention_3s": "3 saniye tutunma",
+        "completion_rate": "tamamlanma oranı",
+        "engagement_rate": "etkileşim oranı",
+        "ctr": "tıklama oranı",
+    }
+    cards = []
+    for v in ab_verdicts:
+        driver_rows = "".join(
+            f"<tr><td>{_esc(labels.get(d['metric'], d['metric']))}</td>"
+            f"<td class='num'>{d.get('a_z', 0):+.2f}</td>"
+            f"<td class='num'>{d.get('b_z', 0):+.2f}</td>"
+            f"<td class='num'>{abs(d.get('share', 0)) * 100:.0f}%</td></tr>"
+            for d in v.drivers
+        )
+        winner_chip = (
+            f"<span class='chip real'>A ({_esc(v.render_variant_a)}) kazandı</span>"
+            if v.winner == "A" else
+            f"<span class='chip real'>B ({_esc(v.render_variant_b)}) kazandı</span>"
+            if v.winner == "B" else
+            "<span class='chip'>fark yok</span>"
+        )
+        cards.append(f"""
+<div class="verdict">
+  <div class="headline">{_esc(v.sentence_tr)}</div>
+  <div class="sub" style="margin:0 0 10px">{_esc(v.ab_group)} ·
+    A = <code>{_esc(v.render_variant_a)}</code> (n={v.n_a}, HQS {v.hqs_a:+.3f}) ·
+    B = <code>{_esc(v.render_variant_b)}</code> (n={v.n_b}, HQS {v.hqs_b:+.3f}) ·
+    {winner_chip} ·
+    <span class="chip {'sim' if v.confidence == 'simulated' else 'real'}">
+    {_esc(v.confidence)}</span></div>
+  <table><tr><th>metrik</th><th>A z</th><th>B z</th><th>fark payı</th></tr>
+  {driver_rows}</table>
+  <ul>{''.join(f"<li>{_esc(c)}</li>" for c in v.caveats)}</ul>
+</div>""")
+
+    return (
+        "<h2>A/B testi: aynı klip, iki açılış efekti</h2>"
+        "<p class='sub'>Aşağıdaki karşılaştırma hook tipi bazında değil, "
+        "<strong>tek bir klibin</strong> iki farklı açılış efektiyle "
+        "render edilmiş hallerini birbirine karşı ölçer -- içerik, hook ve "
+        "platform seti sabit; değişen tek şey render_variant.</p>"
+        + "".join(cards)
+    )
+
+
+def render_report(
+    base: Path, rows: list[dict], verdict, config: dict, *, ab_verdicts: list | None = None
+) -> Path:
     base = Path(base)
     out_dir = base / "report"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -193,6 +245,7 @@ def render_report(base: Path, rows: list[dict], verdict, config: dict) -> Path:
     metric_rows = "".join(
         f"<tr><td><code>{_esc(r['post_id'])}</code></td>"
         f"<td>{_esc(r['platform'])}</td>"
+        f"<td>{_esc(r.get('lang', 'tr')).upper()}</td>"
         f"<td>{_esc(r.get('hook_type', ''))}</td>"
         f"<td class='num'>{r.get('impressions', 0):,}</td>"
         f"<td class='num'>{r.get('hook_retention_3s', 0):.1%}</td>"
@@ -242,6 +295,8 @@ def render_report(base: Path, rows: list[dict], verdict, config: dict) -> Path:
 
 {banner}
 
+{_ab_test_block(ab_verdicts or [])}
+
 <h2>Hook değerlendirmesi</h2>
 <div class="verdict">
   <div class="headline">{_esc(verdict.sentence_tr)}</div>
@@ -274,7 +329,7 @@ nötre çeker: tek gözlemli bir tip gürültüyle zirveye çıkamaz.</p>
 <th>hook tipi</th><th>skor</th><th>hook metni</th></tr>{clip_rows}</table>
 
 <h2>Metrikler (T+24h)</h2>
-<table><tr><th>gönderi</th><th>platform</th><th>hook</th><th>gösterim</th>
+<table><tr><th>gönderi</th><th>platform</th><th>dil</th><th>hook</th><th>gösterim</th>
 <th>3sn tutunma</th><th>tamamlanma</th><th>etkileşim</th><th>kaynak</th></tr>
 {metric_rows}</table>
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from yvc.io import read_json, write_json
 from yvc.publish.adapters import get_adapter
 from yvc.publish.base import DryRunAdapter, MediaAsset, PublishRequest
-from yvc.report.analysis import MetricRow, analyze
+from yvc.report.analysis import MetricRow, analyze, analyze_ab_test
 from yvc.scheduling.planner import TR, plan
 
 
@@ -318,6 +318,7 @@ def _collect(base: Path, config: dict) -> None:
                     hook_type=post.get("hook_type") or "curiosity_gap",
                     duration_s=rendered.get("duration_s") or 30.0,
                     window=window,
+                    render_variant=rendered.get("render_variant") or "plain",
                 ),
                 missing, real=real,
             )
@@ -327,6 +328,9 @@ def _collect(base: Path, config: dict) -> None:
                 "platform": post["platform"],
                 "hook_type": post.get("hook_type"),
                 "variant": post.get("variant", "A"),
+                "render_variant": rendered.get("render_variant") or "plain",
+                "ab_group": post.get("ab_group"),
+                "lang": post.get("lang", "tr"),
                 "window": window,
                 **sim.values,
                 "provenance": row_provenance(sim.provenance),
@@ -358,6 +362,8 @@ def _report(base: Path, config: dict) -> None:
         MetricRow(
             post_id=r["post_id"], clip_id=r["clip_id"], platform=r["platform"],
             hook_type=r.get("hook_type") or "unknown", variant=r.get("variant", "A"),
+            render_variant=r.get("render_variant", "plain"),
+            ab_group=r.get("ab_group"), lang=r.get("lang", "tr"),
             impressions=r.get("impressions", 0), views_3s=r.get("views_3s", 0),
             completion_rate=r.get("completion_rate", 0.0),
             engagement_rate=r.get("engagement_rate", 0.0),
@@ -371,9 +377,14 @@ def _report(base: Path, config: dict) -> None:
     verdict = analyze(rows)
     print(f"[report] verdict: {verdict.sentence_tr}")
 
-    out = render_report(base, rows_raw, verdict, config)
+    ab_verdicts = analyze_ab_test(rows)
+    for v in ab_verdicts:
+        print(f"[report] A/B: {v.sentence_tr}")
+
+    out = render_report(base, rows_raw, verdict, config, ab_verdicts=ab_verdicts)
     write_json(base / "report" / "report.json", {
         "verdict": verdict.__dict__,
+        "ab_test_verdicts": [v.__dict__ for v in ab_verdicts],
         "window_analyzed": target,
         "row_count": len(rows_raw),
     })
