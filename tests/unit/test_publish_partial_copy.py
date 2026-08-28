@@ -124,3 +124,23 @@ def test_a_post_whose_numbers_failed_the_gate_does_not_read_as_clean(tmp_path):
     row = next(r for r in read_json(base / "publish.json")["results"]
                if r.get("post_id") == "c01-instagram-A")
     assert [i["code"] for i in row["copy_validation_errors"]] == ["NUMBER_HALLUCINATION"]
+
+
+def test_attribution_csv_carries_the_scheduled_send_time(tmp_path):
+    """The send time comes from schedule.json, not from the post.
+
+    scheduled_at_utc was read straight off the posts.json row, where it
+    has never existed -- the copy does not know when it will be sent. So
+    the column was emitted on every row and populated on none, which
+    reads as "nothing was scheduled" rather than as a missing join."""
+    base = tmp_path / "vid"
+    base.mkdir()
+    _fixture(base)
+
+    run_delivery_stage("publish", base, {})
+
+    import csv
+
+    with (base / "attribution.csv").open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert rows[0]["scheduled_at_utc"] == "2026-08-28T16:50:00Z"

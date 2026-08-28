@@ -182,23 +182,35 @@ def _publish(base: Path, config: dict) -> None:
 
     write_json(base / "publish.json", {"mode": "dry_run", "results": results})
     _write_proof_readme(out_dir, results)
-    _write_attribution_csv(base / "attribution.csv", raw_posts)
+    _write_attribution_csv(base / "attribution.csv", raw_posts, scheduled)
     print(f"[publish] {len(results)} posts -> {out_dir}")
 
 
-def _write_attribution_csv(out_path: Path, posts: list[dict]) -> None:
+def _write_attribution_csv(
+    out_path: Path, posts: list[dict], scheduled: dict[str, dict]
+) -> None:
     """Per-post UTM/attribution rows, emitted every run.
 
     Written from posts.json rather than publish.json's results so a clip
     that failed to render still gets a row -- the tracking link is a
     property of the copy, not of whether the render succeeded, and the
     csv is meant to be readable before a single click has come in.
+
+    The send time is merged in from schedule.json. It is not a property
+    of the copy and so is absent from posts.json: reading the column
+    straight off the post left every row's scheduled_at_utc blank, which
+    is worse than not emitting the column at all -- a reader takes it to
+    mean nothing was scheduled.
     """
     import csv
 
     from yvc.attribution.utm import rows_for_export
 
-    rows = rows_for_export([p for p in posts if p.get("post_id")])
+    rows = rows_for_export([
+        {**p, "scheduled_at_utc": scheduled.get(p["post_id"], {}).get(
+            "scheduled_at_utc", "")}
+        for p in posts if p.get("post_id")
+    ])
     if not rows:
         return
     with out_path.open("w", newline="", encoding="utf-8") as fh:
