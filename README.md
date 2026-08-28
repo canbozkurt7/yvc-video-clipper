@@ -414,9 +414,24 @@ exploitation.
 **`UnicodeEncodeError` on Turkish text** — something bypassed
 `yvc.bootstrap` or used bare `open()`. Both are covered by tests.
 
-**yt-dlp only offers 360p** — YouTube's n-signature challenge needs a JS
-runtime. Install Deno and put it on PATH; without it high-resolution
-formats silently disappear from the format list.
+**yt-dlp only offers 360p** — two different causes, both silent. Either
+YouTube's n-signature challenge needs a JS runtime (install Deno and put
+it on PATH; without it high-resolution formats disappear from the format
+list), or ffmpeg cannot be found by yt-dlp, which needs it to mux the
+separate 1080p video and audio streams — when the mux fails the format
+list falls back to a single-file `best`, and 360p lands on disk under
+the expected name. `yvc doctor` checks for both. Since acquire refuses a
+source below `source.min_height` (720 by default), a run cannot get past
+this quietly any more: the file is moved to `source.rejected-<h>p.mp4`
+and the stage fails rather than spending an hour transcribing pixels the
+9:16 crop cannot use.
+
+**Every clip fails with `Unrecognized option 'filter_complex_script'`** —
+an ffmpeg 8.0 or newer. The option was removed in favour of the generic
+`-/filter_complex`; the render stage probes which one the installed
+binary takes, so upgrading past this needs no config change. If every
+clip fails for any other reason, the stage now refuses the run rather
+than writing an empty `render.json` and reporting success.
 
 **`HTTP 403` on a specific format** — try another player client via
 `--extractor-args "youtube:player_client=web_embedded"`. Clients differ

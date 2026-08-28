@@ -43,12 +43,12 @@ okunabilir hale getirmekten ibaret.
 
 | Aşama | Ekranda | Neyi kanıtlıyor |
 |---|---|---|
-| acquire | `[acquire] 1920x1080 @50fps`, dosya boyutu | Kaynak gerçekten 1080p indi (Deno olmadan sessizce 360p olurdu) |
+| acquire | `[acquire] 1920x1080 @ 50/1`, dosya boyutu | Kaynak gerçekten 1080p indi. Deno **veya** ffmpeg eksik olsaydı sessizce 360p inerdi; artık `min_height` altındaki kaynak reddediliyor |
 | transcribe | ilerleme satırı: `RTF 1.16x ETA 38m` | Süre tahmini yapıyor, sessizce beklemiyor |
-| turkish | `diacritic density 82.6/1000 -> ok` | Türkçe doğruluğu iddia değil, ölçüm |
-| segment | `1507 parça -> 37 segment` | LLM sınır seçiyor, zaman damgası üretmiyor |
+| turkish | `diacritic density 82.1/1000 -> OK` | Türkçe doğruluğu iddia değil, ölçüm |
+| segment | `1508 parça -> 30 segment` | LLM sınır seçiyor, zaman damgası üretmiyor |
 | **score** | **`yvc scorecard`** (aşağıda) | Rubrik savunulabilir |
-| select | `using real word timings (10583 words)` + `1 segment dropped -- hook not locatable` | Hook bulunamayınca klip **üretmiyor** |
+| select | `using real word timings (10595 words)`, `3 segment dropped -- hook not locatable`, `seg_006 scored 70.1 but produced no window` | Klip üretmediği segmenti **adıyla ve sebebiyle** yazıyor |
 | render | `QC transitioned at 20.7s` | Görüntü kontrol ediliyor, sadece exit code değil |
 | copywrite | `posts.json` içindeki `evidence_quote` | Metin uydurmuyor |
 | publish | `publish/PUBLISH_PROOF.md` | Gönderilecek payload hazır, gönderilmedi |
@@ -121,7 +121,7 @@ Ekran: komut girilir, aşamalar akar. Hızlandırma + süre sayacı.
 Göstermeye değer anlar:
 - `[acquire] 1920x1080 @50fps`
 - `[transcribe] ... RTF 1.16x ETA 38m` — ilerleme ve tahmin
-- `[select] using real word timings (10583 words)`
+- `[select] using real word timings (10595 words)`
 - `[render] QC ...` — QC satırları
 - `manifest.json` içindeki aşama süreleri
 

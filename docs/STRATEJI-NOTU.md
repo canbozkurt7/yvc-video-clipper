@@ -71,7 +71,14 @@ alt sürecine bağlı ve her biri bir sonrakinin girdisini üretiyor.
   Segfault Python'da yakalanamadığı için model fallback merdiveni **alt süreçte** prob ediyor.
 - **YouTube 1080p vermiyor.** n-signature challenge için JS runtime (Deno) şart; onsuz
   sessizce sadece 360p listeleniyor. Ayrıca format 299 çoğu player client'ta 403 verdi;
-  `web_embedded` çalıştı.
+  `web_embedded` çalıştı. İkinci ve daha sinsi sebep: 1080p video ile ses ayrı akış
+  geliyor ve bunları yt-dlp'nin kendisi ffmpeg ile birleştiriyor — ffmpeg çocuğun
+  PATH'inde yoksa birleştirme düşüyor, format listesi tek dosyalık `best`'e geriliyor
+  ve **360p doğru dosya adıyla** diske iniyor. Hiçbir aşama hata vermiyor. Bu yüzden
+  çözünürlük artık uyarı değil kapı: `source.min_height` altındaki kaynak reddediliyor.
+- **ffmpeg 8.0 `-filter_complex_script`'i kaldırdı.** Çalışan bir kurulumun altından
+  sürüm yükselince beş klibin beşi birden düştü. Yerine gelen genel `-/filter_complex`
+  7.0'dan beri var; render hangisini kabul ettiğini binary'ye sorup öyle çağırıyor.
 - **`format=yuv420p` filtrenin SONUNDA olmalı.** `ass` ve `overlay` piksel formatını
   yeniden pazarlık edip yuv444p'ye yükseltiyor; 4:4:4 H.264'ü hiçbir platform kabul etmez.
   Bu, muhakemeyle değil `ffprobe` ile yakalandı.

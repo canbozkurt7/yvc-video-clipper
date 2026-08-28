@@ -66,7 +66,7 @@ flowchart TD
 
 | # | Aşama | Araç / Model | Çıktı | Neden bu araç? |
 |---|---|---|---|---|
-| 1 | acquire | `yt-dlp` + **Deno** + `ffmpeg` | `source.mp4`, `audio16k_raw.wav` | Deno olmadan n-signature challenge çözülmez ve YouTube sessizce sadece 360p listeler |
+| 1 | acquire | `yt-dlp` + **Deno** + `ffmpeg` | `source.mp4`, `audio16k_raw.wav` | Deno olmadan n-signature challenge çözülmez, ffmpeg bulunamazsa 1080p'nin ayrı video/ses akışları birleştirilemez — ikisi de sessizce 360p'ye düşürür. Bu yüzden `source.min_height` altındaki kaynak reddediliyor |
 | 2 | transcribe | **faster-whisper** (CTranslate2 int8) | `transcript.json` (kelime-seviyesi) | GPU yok, 7.7GB RAM → torch dışlandı. Kelime timestamp'i karaoke altyazı için zorunlu |
 | 3 | turkish | saf Python + `yt-dlp` altyazı | `quality_report.json` | Diakritik yoğunluğu ölçülür, iddia edilmez |
 | 4 | segment | **`claude -p`** (subprocess) | `segments.json` | API key yok; CLI OAuth'lu. Model yalnızca id döndürür |
