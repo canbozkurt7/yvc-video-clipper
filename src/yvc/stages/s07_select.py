@@ -599,6 +599,10 @@ def select(
         print("[select] WARNING no transcript: falling back to interpolated timings")
 
     unlocatable: list[str] = []
+    # Located, but too late in its segment for a window of this length to
+    # fit after it. The highest-scoring segment in the reference video
+    # (seg_006, 70.1) disappears this way, and said nothing about it.
+    hook_too_late: list[dict] = []
 
     def _windows(seg: dict, min_s: float, max_s: float) -> list[Window]:
         units = (
@@ -615,8 +619,23 @@ def select(
             index, _ = locate_hook(
                 units, seg.get("evidence_quote", ""), seg.get("hook_line", "")
             )
-            if index < 0 and seg["segment_id"] not in unlocatable:
-                unlocatable.append(seg["segment_id"])
+            if index < 0:
+                if seg["segment_id"] not in unlocatable:
+                    unlocatable.append(seg["segment_id"])
+            else:
+                # Windows open on the hook and end inside the same
+                # segment, so a hook near the end leaves no room. Worth
+                # naming: it drops the segment on the strength of where
+                # its best line sits, not how good the segment is.
+                room = round(seg["end"] - units[index][1], 1)
+                known = {d["segment_id"] for d in hook_too_late}
+                if seg["segment_id"] not in known:
+                    hook_too_late.append({
+                        "segment_id": seg["segment_id"],
+                        "total": seg["total"],
+                        "room_after_hook_s": room,
+                        "needs_s": min_s,
+                    })
             return []
         return candidate_windows(seg, min_s, max_s, sentences=units)
 
@@ -708,6 +727,12 @@ def select(
             "16:9": sum(1 for c in clips if c.aspect == "16:9"),
         },
         "clips": [c.__dict__ for c in clips],
+        "dropped": {
+            "hook_not_locatable": unlocatable,
+            "hook_too_late_for_window": sorted(
+                hook_too_late, key=lambda d: -d["total"]
+            ),
+        },
     }
     write_json(out_path, payload)
 
@@ -721,6 +746,12 @@ def select(
         print(
             f"[select] {len(unlocatable)} segment(s) dropped -- hook not locatable "
             f"in the transcript: {', '.join(unlocatable[:8])}"
+        )
+    for dropped in sorted(hook_too_late, key=lambda d: -d["total"])[:5]:
+        print(
+            f"[select] {dropped['segment_id']} scored {dropped['total']:.1f} but "
+            f"produced no window: only {dropped['room_after_hook_s']}s follow its "
+            f"hook, and this format needs {dropped['needs_s']}s"
         )
     if relaxations:
         print(f"[select] WARNING threshold relaxed to meet quota: {relaxations}")
