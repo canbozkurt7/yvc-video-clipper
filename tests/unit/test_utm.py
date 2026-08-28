@@ -83,3 +83,46 @@ def test_rows_for_export_recovers_hook_type():
     }]
     rows = rows_for_export(posts)
     assert rows[0]["hook_type"] == "contrarian"
+
+
+@pytest.mark.parametrize("lang", ["tr", "en"])
+def test_language_survives_the_roundtrip(lang):
+    """The same clip ships a Turkish and an English LinkedIn post, so a
+    click is only attributable if the language is part of the key. It was
+    emitted into the URL by copywrite while AttributionKey had no field
+    for it, so parse() dropped it and the two posts became
+    indistinguishable in every column of attribution.csv."""
+    url = build(
+        DESTINATION, platform="linkedin", clip_id="c01",
+        hook_type="data_number", variant="A", lang=lang,
+    )
+    assert f"yvc_lang={lang}" in url
+    assert parse(url).lang == lang
+
+
+def test_an_untagged_language_defaults_to_turkish():
+    """Links written before yvc_lang existed must still parse, as the
+    Turkish posts they were."""
+    url = (
+        DESTINATION + "?utm_source=linkedin&utm_medium=social_organic"
+        "&utm_campaign=c&utm_content=c01&utm_term=data_number&yvc_v=A"
+    )
+    assert parse(url).lang == "tr"
+
+
+def test_export_rows_carry_the_language_read_back_off_the_url():
+    rows = rows_for_export([
+        {"post_id": "c01-linkedin-A", "clip_id": "c01", "platform": "linkedin",
+         "variant": "A", "lang": "tr",
+         "tracking_url": build(DESTINATION, platform="linkedin", clip_id="c01",
+                               hook_type="data_number", lang="tr")},
+        {"post_id": "c01-linkedin-A-en", "clip_id": "c01", "platform": "linkedin",
+         "variant": "A", "lang": "en",
+         "tracking_url": build(DESTINATION, platform="linkedin", clip_id="c01",
+                               hook_type="data_number", lang="en")},
+    ])
+    assert "lang" in rows[0]
+    assert [r["lang"] for r in rows] == ["tr", "en"]
+    # The two rows must differ somewhere other than post_id, or the csv
+    # cannot attribute a click to a language.
+    assert rows[0] != rows[1]

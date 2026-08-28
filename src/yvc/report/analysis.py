@@ -66,6 +66,17 @@ class MetricRow:
         return real / len(fields)
 
 
+# A paired A/B on one clip yields one observation per platform, not a
+# distribution. Z-scoring two values against each other saturates at
+# +/-0.7071 the moment they differ at all -- the sign survives and the
+# magnitude is destroyed -- so the first version of this function
+# reported the sign of simulator noise as a creative conclusion, with a
+# 0.1pp difference and a 30pp difference producing byte-identical output.
+# Raw relative lift keeps the magnitude, and a winner is only named when
+# the gap is both material and unanimous across platforms.
+AB_MATERIAL_LIFT = 0.05
+
+
 @dataclass
 class VariantVerdict:
     """A vs. B for one render_variant.ab_test split.
@@ -76,6 +87,11 @@ class VariantVerdict:
     comes from the two sides of one `ab_group` -- same transcript, same
     hook, same platforms -- so a gap is attributable to the opening
     effect and not to "which clip was better".
+
+    `mean_lift` is B's composite relative lift over A, averaged over the
+    platforms both sides reached. `winner` is None whenever the evidence
+    does not clear both bars, and `sentence_tr` then says which bar it
+    failed -- an inconclusive A/B is a result, not a gap in the report.
     """
 
     ab_group: str
@@ -83,8 +99,10 @@ class VariantVerdict:
     render_variant_b: str
     n_a: int
     n_b: int
-    hqs_a: float
-    hqs_b: float
+    mean_lift: float
+    platform_lifts: list[dict]
+    platforms_agreeing: int
+    material: bool
     winner: str | None
     drivers: list[dict]
     sentence_tr: str
@@ -265,18 +283,39 @@ def _simulated_share(rows: list[MetricRow]) -> float:
     return 1.0 - sum(r.real_fraction() for r in rows) / len(rows)
 
 
-def analyze_ab_test(rows: list[MetricRow]) -> list[VariantVerdict]:
+METRIC_LABELS_TR = {
+    "hook_retention_3s": "3 saniye tutunma",
+    "completion_rate": "tamamlanma oranı",
+    "engagement_rate": "etkileşim oranı",
+    "ctr": "tıklama oranı",
+}
+
+
+def _mean_of(rows: list[MetricRow], field_name: str) -> float:
+    return sum(getattr(r, field_name) for r in rows) / len(rows)
+
+
+def analyze_ab_test(
+    rows: list[MetricRow], *, material_lift: float = AB_MATERIAL_LIFT
+) -> list[VariantVerdict]:
     """One verdict per `ab_group` present in `rows`: side A vs. side B.
 
-    Z-scoring is still done within-platform (same reasoning as `analyze`
-    -- an Instagram number and a LinkedIn number are not on the same
-    scale), but the ranking that follows groups by `variant` ("A"/"B")
-    within a single `ab_group` rather than by `hook_type` across the
-    whole run, so the two sides being compared are guaranteed to share
-    everything except the render_variant that was actually varied.
+    The two sides of a split share content, hook and platform routing, so
+    the only thing left varying is the opening effect -- but that also
+    means each platform contributes exactly one A/B *pair*, and a pair is
+    not a sample you can z-score. Comparison is therefore raw relative
+    lift per platform (magnitude intact), composited with HQS_WEIGHTS and
+    averaged over the platforms both sides actually reached.
 
-    Groups with fewer than one row on each side are skipped rather than
-    guessed at -- a partially-published pair says nothing yet.
+    A winner is named only when the composite lift clears
+    `material_lift` AND every platform agrees on its direction. With
+    three platforms a sign test cannot beat p=0.25, so unanimity is the
+    strongest claim the data supports; anything weaker is reported as
+    inconclusive with the reason, which is more useful to a reader than a
+    confident verdict drawn from noise.
+
+    Groups without at least one row on each side, or with no platform in
+    common between the sides, are skipped rather than guessed at.
     """
     by_group: dict[str, list[MetricRow]] = {}
     for row in rows:
@@ -285,83 +324,138 @@ def analyze_ab_test(rows: list[MetricRow]) -> list[VariantVerdict]:
 
     verdicts: list[VariantVerdict] = []
     for ab_group, group_rows in by_group.items():
-        by_variant: dict[str, list[MetricRow]] = {}
+        sides: dict[str, dict[str, list[MetricRow]]] = {"A": {}, "B": {}}
         for row in group_rows:
-            by_variant.setdefault(row.variant, []).append(row)
-        if "A" not in by_variant or "B" not in by_variant:
+            if row.variant in sides:
+                sides[row.variant].setdefault(row.platform, []).append(row)
+        if not sides["A"] or not sides["B"]:
+            continue
+        # Only platforms carrying both sides can be paired. A platform
+        # that received just one side says nothing about the effect, and
+        # averaging its one-sided value in would bias the composite.
+        shared = sorted(set(sides["A"]) & set(sides["B"]))
+        if not shared:
             continue
 
-        z = {f: _zscore_within_platform(group_rows, f) for f in HQS_WEIGHTS}
-        hqs = {
-            r.post_id: sum(w * z[f][r.post_id] for f, w in HQS_WEIGHTS.items())
-            for r in group_rows
-        }
-        a_rows, b_rows = by_variant["A"], by_variant["B"]
-        hqs_a = sum(hqs[r.post_id] for r in a_rows) / len(a_rows)
-        hqs_b = sum(hqs[r.post_id] for r in b_rows) / len(b_rows)
+        a_rows = [r for p in shared for r in sides["A"][p]]
+        b_rows = [r for p in shared for r in sides["B"][p]]
 
-        contributions = []
-        for field_name, weight in HQS_WEIGHTS.items():
-            a_z = sum(z[field_name][r.post_id] for r in a_rows) / len(a_rows)
-            b_z = sum(z[field_name][r.post_id] for r in b_rows) / len(b_rows)
-            contributions.append({
-                "metric": field_name,
-                "a_z": round(a_z, 3),
-                "b_z": round(b_z, 3),
-                "contribution": weight * (b_z - a_z),
+        platform_lifts: list[dict] = []
+        metric_lifts: dict[str, list[float]] = {f: [] for f in HQS_WEIGHTS}
+        undefined: list[str] = []
+        for platform in shared:
+            per_metric: dict[str, float] = {}
+            composite = 0.0
+            for field_name, weight in HQS_WEIGHTS.items():
+                a_val = _mean_of(sides["A"][platform], field_name)
+                b_val = _mean_of(sides["B"][platform], field_name)
+                if a_val <= 0:
+                    # A ratio against zero is undefined, not infinite.
+                    # Recorded and excluded rather than silently becoming
+                    # an enormous lift.
+                    lift = 0.0
+                    undefined.append(f"{platform}/{field_name}")
+                else:
+                    lift = (b_val - a_val) / a_val
+                per_metric[field_name] = lift
+                metric_lifts[field_name].append(lift)
+                composite += weight * lift
+            platform_lifts.append({
+                "platform": platform,
+                "composite_lift": round(composite, 4),
+                "per_metric": {k: round(v, 4) for k, v in per_metric.items()},
             })
-        gap = sum(c["contribution"] for c in contributions)
-        positive = sum(c["contribution"] for c in contributions if c["contribution"] * gap > 0)
-        for c in contributions:
-            c["share"] = (
-                round(c["contribution"] / positive, 4)
-                if positive and c["contribution"] * gap > 0 else 0.0
+
+        mean_lift = sum(
+            p["composite_lift"] for p in platform_lifts
+        ) / len(platform_lifts)
+        direction = 1 if mean_lift > 0 else (-1 if mean_lift < 0 else 0)
+        agreeing = sum(
+            1 for p in platform_lifts
+            if direction and p["composite_lift"] * direction > 0
+        )
+        unanimous = bool(direction) and agreeing == len(platform_lifts)
+        material = abs(mean_lift) >= material_lift
+
+        drivers: list[dict] = []
+        for field_name, weight in HQS_WEIGHTS.items():
+            lifts = metric_lifts[field_name]
+            metric_mean = sum(lifts) / len(lifts)
+            drivers.append({
+                "metric": field_name,
+                "mean_lift": round(metric_mean, 4),
+                "contribution": round(weight * metric_mean, 4),
+            })
+        toward = sum(
+            d["contribution"] for d in drivers
+            if direction and d["contribution"] * direction > 0
+        )
+        for d in drivers:
+            d["share"] = (
+                round(d["contribution"] / toward, 4)
+                if toward and direction and d["contribution"] * direction > 0
+                else 0.0
             )
-            c["contribution"] = round(c["contribution"], 4)
-        contributions.sort(key=lambda c: abs(c["contribution"]), reverse=True)
+        # Sorted by how hard each metric pushed *in the direction of the
+        # gap*, not by absolute size. Sorting on abs() let the largest
+        # metric arguing against the winner land at drivers[0], so the
+        # verdict named the one metric the winner lost on, at 0%.
+        drivers.sort(key=lambda d: d["contribution"] * (direction or 1), reverse=True)
 
         simulated_share = _simulated_share(group_rows)
         confidence = "simulated" if simulated_share > 0.5 else "observed"
         variant_a = a_rows[0].render_variant
         variant_b = b_rows[0].render_variant
+        winner = ("B" if direction > 0 else "A") if (material and unanimous) else None
+        pct = abs(mean_lift) * 100
 
-        labels = {
-            "hook_retention_3s": "3 saniye tutunma",
-            "completion_rate": "tamamlanma oranı",
-            "engagement_rate": "etkileşim oranı",
-            "ctr": "tıklama oranı",
-        }
-        if abs(hqs_a - hqs_b) < 1e-9:
-            winner = None
-            sentence = (
-                f"{ab_group}: '{variant_a}' (A) ile '{variant_b}' (B) arasında "
-                "ölçülebilir bir fark yok."
-            )
-        else:
-            winner = "A" if hqs_a > hqs_b else "B"
+        if winner:
             winner_variant = variant_a if winner == "A" else variant_b
             loser_variant = variant_b if winner == "A" else variant_a
-            top = contributions[0]
+            top = drivers[0]
             verb = "öne çıktı" if confidence == "simulated" else "kazandı"
             sentence = (
                 f"{ab_group}: '{winner_variant}' ({winner}) '{loser_variant}' "
-                f"karşısında {verb}. Başlıca etken — "
-                f"{labels.get(top['metric'], top['metric'])}: "
-                f"%{abs(top['share']) * 100:.0f}."
+                f"karşısında %{pct:.1f} bileşik fark ile {verb}; "
+                f"{agreeing}/{len(platform_lifts)} platformda aynı yön. "
+                f"Başlıca etken — "
+                f"{METRIC_LABELS_TR.get(top['metric'], top['metric'])}: "
+                f"%{top['share'] * 100:.0f}."
+            )
+        elif not material:
+            sentence = (
+                f"{ab_group}: '{variant_a}' (A) ile '{variant_b}' (B) arasındaki "
+                f"bileşik fark %{pct:.1f}; %{material_lift * 100:.0f} materyallik "
+                "eşiğinin altında kaldığı için kazanan ilan edilmiyor."
+            )
+        else:
+            sentence = (
+                f"{ab_group}: bileşik fark %{pct:.1f}, ama platformlar aynı yönü "
+                f"göstermiyor ({agreeing}/{len(platform_lifts)}). Tek bir çiftte "
+                "bu, gürültüden ayrılamaz; kazanan ilan edilmiyor."
             )
 
         caveats = [
-            f"Örneklem küçük: A n={len(a_rows)}, B n={len(b_rows)} (gönderi, "
-            "izleyici değil).",
-            "Aynı klip içeriği, aynı platform seti -- yalnızca açılış efekti "
-            "değişti; bu yüzden hook_type karşılaştırmasından daha az yanlı, "
-            "ama tek bir video, tek bir çalıştırma.",
+            f"Ölçüm birimi çift: A n={len(a_rows)}, B n={len(b_rows)} gönderi, "
+            f"eşleşen {len(platform_lifts)} platformda birer çift.",
+            "Aynı klip içeriği, aynı hook, aynı platform seti -- değişen tek şey "
+            "açılış efekti. Bu yüzden hook tipi karşılaştırmasından daha az yanlı.",
+            f"Kazanan ilanı iki koşulu birlikte arıyor: bileşik farkın "
+            f"%{material_lift * 100:.0f} üstünde olması ve tüm platformlarda aynı "
+            f"yönü göstermesi. {len(platform_lifts)} platformla işaret testinin "
+            "ulaşabileceği en iyi anlamlılık p=0.25'tir; bu bir yön göstergesidir, "
+            "istatistiksel kanıt değil.",
         ]
+        if undefined:
+            caveats.append(
+                "A tarafında sıfır olduğu için oransal karşılaştırmadan çıkarılan "
+                f"metrikler: {', '.join(sorted(set(undefined))[:4])}."
+            )
         if confidence == "simulated":
             caveats.insert(
                 0,
-                f"Katkıda bulunan değerlerin %{simulated_share * 100:.0f}'ı "
-                "SİMÜLE. Bu sonuç yön gösterir, karar vermez.",
+                f"Katkıda bulunan değerlerin %{simulated_share * 100:.0f}'ı SİMÜLE. "
+                "Bu sonuç yön gösterir, karar vermez.",
             )
 
         verdicts.append(VariantVerdict(
@@ -369,9 +463,12 @@ def analyze_ab_test(rows: list[MetricRow]) -> list[VariantVerdict]:
             render_variant_a=variant_a,
             render_variant_b=variant_b,
             n_a=len(a_rows), n_b=len(b_rows),
-            hqs_a=round(hqs_a, 4), hqs_b=round(hqs_b, 4),
+            mean_lift=round(mean_lift, 4),
+            platform_lifts=platform_lifts,
+            platforms_agreeing=agreeing,
+            material=material,
             winner=winner,
-            drivers=contributions,
+            drivers=drivers,
             sentence_tr=sentence,
             confidence=confidence,
             caveats=caveats,

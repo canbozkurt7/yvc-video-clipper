@@ -94,3 +94,51 @@ def test_english_post_is_never_created_for_x(tmp_path):
 
     posts = read_json(out_path)["posts"]
     assert not [p for p in posts if p.get("lang") == "en" and p["platform"] == "x"]
+
+
+def test_an_overlong_body_en_is_rejected_at_copywrite_not_at_publish(tmp_path):
+    """The English post is published to LinkedIn, so it has to clear
+    LinkedIn's budget. It used to reach publish carrying the Turkish
+    text's validation verdict -- a pass never run on it -- and only then
+    fail TEXT_TOO_LONG, at the one point where nothing can be rewritten."""
+    from yvc.stages.s09_copywrite import body_budget, PLATFORM_SPECS, validate_copy
+
+    budget = body_budget(PLATFORM_SPECS["linkedin"])
+    copy = StubLLM().complete(None, None, None).data
+    copy.body_en = "E" * (budget + 1)
+    codes = {i["code"] for i in validate_copy(copy, CLIP_TEXT, [])
+             if i["severity"] == "error"}
+    assert "EN_LEN_OVER" in codes
+
+
+def test_a_link_inside_body_en_is_rejected(tmp_path):
+    """LinkedIn is in LINK_APPENDED_BY_PUBLISHER, so a link in the body
+    is posted twice -- gated for the Turkish body, previously not for the
+    English one."""
+    from yvc.stages.s09_copywrite import validate_copy
+
+    copy = StubLLM().complete(None, None, None).data
+    copy.body_en = "Read more at https://example.com/post about this."
+    codes = {i["code"] for i in validate_copy(copy, CLIP_TEXT, [])
+             if i["severity"] == "error"}
+    assert "EN_LINK_IN_BODY" in codes
+
+
+def test_body_en_is_not_gated_when_bilingual_is_off(tmp_path):
+    """With bilingual off the field is never published, so rejecting a
+    clip over it would block copy for an unused value."""
+    from yvc.stages.s09_copywrite import body_budget, PLATFORM_SPECS, validate_copy
+
+    copy = StubLLM().complete(None, None, None).data
+    copy.body_en = "E" * (body_budget(PLATFORM_SPECS["linkedin"]) + 1)
+    codes = {i["code"] for i in validate_copy(copy, CLIP_TEXT, [], check_en=False)
+             if i["severity"] == "error"}
+    assert not codes
+
+
+def test_a_clean_body_en_still_passes(tmp_path):
+    from yvc.stages.s09_copywrite import validate_copy
+
+    copy = StubLLM().complete(None, None, None).data
+    assert not [i for i in validate_copy(copy, CLIP_TEXT, [])
+                if i["severity"] == "error"]

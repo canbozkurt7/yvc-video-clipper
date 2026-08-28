@@ -142,6 +142,9 @@ KURALLAR:
 - Klipte söylenmeyen hiçbir iddiada bulunma.
 - youtube.title alanını doldur (en fazla 90 karakter).
 - body_en: LinkedIn metninin İngilizce transcreation'ı (çeviri değil, uyarlama).
+  Bu metin AYRI bir LinkedIn gönderisi olarak yayınlanıyor, dolayısıyla
+  LinkedIn kurallarına o da uyacak: en fazla {en_max} karakter, içine link
+  YAZMA (yayıncı ekliyor), yasaklı ifadeleri kullanma.
 """
 
 
@@ -201,9 +204,15 @@ def _norm(text: str) -> str:
 
 
 def validate_copy(
-    copy: ClipCopy, clip_text: str, banned: list[str]
+    copy: ClipCopy, clip_text: str, banned: list[str], *, check_en: bool = True
 ) -> list[dict]:
-    """Programmatic gates. Errors force regeneration; warnings are recorded."""
+    """Programmatic gates. Errors force regeneration; warnings are recorded.
+
+    `check_en` follows `copy.bilingual`: when the English transcreation is
+    actually published as its own post it has to clear the same gates the
+    Turkish bodies do, and when it isn't published there is no reason to
+    reject a clip over an unused field.
+    """
     issues: list[dict] = []
     haystack = _norm(clip_text)
 
@@ -271,6 +280,31 @@ def validate_copy(
             if phrase.lower() in lowered:
                 issues.append({"code": "BANNED_PHRASE", "severity": "error",
                                "detail": f"{platform}: {phrase!r}"})
+
+    # body_en is published as its own LinkedIn post whenever copy.bilingual
+    # is on (see write_copy), so it needs the same gates. Checked here
+    # rather than at publish for exactly the reason LINK_IN_BODY is: here
+    # there is still a rewrite attempt left, and the repair prompt can act
+    # on these codes. Without this the English post reached publish
+    # carrying the Turkish text's validation verdict -- a pass that had
+    # never been run on it.
+    if check_en and copy.body_en and copy.body_en.strip():
+        english = copy.body_en.strip()
+        budget = body_budget(PLATFORM_SPECS["linkedin"])
+        if len(english) > budget:
+            issues.append({"code": "EN_LEN_OVER", "severity": "error",
+                           "detail": f"body_en: {len(english)} > {budget}"})
+        if "http" in english:
+            issues.append({
+                "code": "EN_LINK_IN_BODY", "severity": "error",
+                "detail": "body_en: the publisher appends the tracking link, "
+                          "so a link in the body is posted twice",
+            })
+        lowered_en = english.lower()
+        for phrase in banned:
+            if phrase.lower() in lowered_en:
+                issues.append({"code": "EN_BANNED_PHRASE", "severity": "error",
+                               "detail": f"body_en: {phrase!r}"})
 
     # Near-identical text across platforms defeats the point of writing
     # five versions. Surfaced as a warning so a reviewer can see it.
@@ -348,6 +382,7 @@ def write_copy(
             link=link,
             specs=specs_text,
             banned=", ".join(banned),
+            en_max=body_budget(PLATFORM_SPECS["linkedin"]),
         )
 
         issues: list[dict] = []
@@ -369,7 +404,9 @@ def write_copy(
                 break
 
             copy_obj = result.data
-            issues = validate_copy(copy_obj, clip["text"], banned)
+            issues = validate_copy(
+                copy_obj, clip["text"], banned, check_en=bilingual
+            )
             errors = [i for i in issues if i["severity"] == "error"]
             if not errors:
                 break

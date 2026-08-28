@@ -523,6 +523,44 @@ class RenderFailureRateError(RuntimeError):
     """Too few clips came out of the encoder to call the render a render."""
 
 
+def purge_orphan_clip_dirs(
+    out_root: Path, keep: set[str], *, enabled: bool
+) -> list[str]:
+    """Clip directories left behind by a *previous, different* selection.
+
+    A/B splitting renames a clip (c01 -> c01a + c01b), and changing
+    ab_test.count or the select thresholds renames others, so the old
+    directory keeps a finished clip.mp4 that no longer appears in
+    clips.json, render.json or the manifest. Clips are the deliverable:
+    somebody listing this folder must not find one more clip than the run
+    accounts for, with no way to tell which is current.
+
+    Removal is the default because a clip directory is fully regenerable
+    from source.mp4 plus clips.json -- the same reasoning that lets
+    retention.purge_source_after_render throw away the much more
+    expensive download. Set render.purge_orphan_clip_dirs to false to keep
+    them and take the warning instead.
+
+    `keep` must come from the *whole* clips.json, never from a
+    `--only`-filtered subset, or a scoped re-render would delete every
+    clip it was not asked to touch.
+    """
+    if not out_root.exists():
+        return []
+    orphans = sorted(
+        d.name for d in out_root.iterdir() if d.is_dir() and d.name not in keep
+    )
+    for name in orphans:
+        if enabled:
+            shutil.rmtree(out_root / name, ignore_errors=True)
+            print(f"[render] removed orphaned clip dir {name}/ -- not in "
+                  "clips.json (regenerable from source + clips.json)")
+        else:
+            print(f"[render] WARNING orphaned clip dir {name}/ is not in "
+                  "clips.json and was left in place")
+    return orphans
+
+
 def render_all(
     base: str | Path,
     *,
@@ -542,7 +580,8 @@ def render_all(
     render_cfg["render_variant"] = cfg_all.get("render_variant", {})
     brand = read_json(brand_path)
 
-    clips = read_json(base / "clips.json")["clips"]
+    all_clips = read_json(base / "clips.json")["clips"]
+    clips = all_clips
     if only:
         clips = [c for c in clips if c["clip_id"] in only]
     transcript = read_json(base / "transcript.json")
@@ -551,6 +590,13 @@ def render_all(
     print(f"[render] encoder: {encoder}")
 
     out_root = base / "clips"
+    # Before rendering, not after: if this run dies half way the folder is
+    # still free of clips belonging to a selection that no longer exists.
+    orphans = purge_orphan_clip_dirs(
+        out_root,
+        {c["clip_id"] for c in all_clips},
+        enabled=render_cfg.get("purge_orphan_clip_dirs", True),
+    )
     results: list[RenderResult] = []
     for clip in clips:
         variant = clip.get("render_variant", "plain")
@@ -583,6 +629,7 @@ def render_all(
         "encoder": encoder,
         "ok": sum(1 for r in results if r.status == "ok"),
         "failed": sum(1 for r in results if r.status != "ok"),
+        "orphaned_clip_dirs": orphans or None,
         "results": [r.__dict__ for r in results],
     }
     write_json(base / "render.json", payload)

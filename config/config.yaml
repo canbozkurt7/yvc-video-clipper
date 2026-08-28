@@ -100,6 +100,12 @@ render:
   fps: 30
   audio_bitrate: 128k
   loudnorm: true
+  # Remove clip directories whose id is no longer in clips.json. Renaming
+  # happens whenever the selection changes -- an A/B split turns c01 into
+  # c01a + c01b -- and the old directory keeps a finished clip.mp4 that
+  # nothing references, so the deliverable folder ends up holding more
+  # clips than the run accounts for. Regenerable, hence removable.
+  purge_orphan_clip_dirs: true
 
 # Opening-style effects for the first fraction of a second of each clip.
 # Research is consistent that 65-71% of short-form viewers decide inside

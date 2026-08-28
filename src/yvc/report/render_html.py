@@ -145,43 +145,61 @@ def _drivers_table(drivers: list[dict]) -> str:
     )
 
 
+def _share_cell(share: float) -> str:
+    """Share of the composite gap, or a dash.
+
+    A metric that pushed against the gap gets share 0 from the analysis,
+    and printing "0%" there reads as "measured at zero" rather than "not
+    part of this gap" -- the dash is the honest rendering.
+    """
+    return f"{share * 100:.0f}%" if share else "&mdash;"
+
+
 def _ab_test_block(ab_verdicts: list) -> str:
     if not ab_verdicts:
         return ""
 
-    labels = {
-        "hook_retention_3s": "3 saniye tutunma",
-        "completion_rate": "tamamlanma oranı",
-        "engagement_rate": "etkileşim oranı",
-        "ctr": "tıklama oranı",
-    }
+    from yvc.report.analysis import METRIC_LABELS_TR as labels
+
     cards = []
     for v in ab_verdicts:
+        # Per-metric mean relative lift, B over A. Signed, because the
+        # direction is the whole point; `share` is only meaningful for the
+        # metrics pushing the same way as the composite gap.
         driver_rows = "".join(
             f"<tr><td>{_esc(labels.get(d['metric'], d['metric']))}</td>"
-            f"<td class='num'>{d.get('a_z', 0):+.2f}</td>"
-            f"<td class='num'>{d.get('b_z', 0):+.2f}</td>"
-            f"<td class='num'>{abs(d.get('share', 0)) * 100:.0f}%</td></tr>"
+            f"<td class='num'>{d.get('mean_lift', 0) * 100:+.1f}%</td>"
+            f"<td class='num'>{_share_cell(d.get('share', 0))}</td></tr>"
             for d in v.drivers
         )
-        winner_chip = (
-            f"<span class='chip real'>A ({_esc(v.render_variant_a)}) kazandı</span>"
-            if v.winner == "A" else
-            f"<span class='chip real'>B ({_esc(v.render_variant_b)}) kazandı</span>"
-            if v.winner == "B" else
-            "<span class='chip'>fark yok</span>"
+        if v.winner:
+            side = v.render_variant_a if v.winner == "A" else v.render_variant_b
+            winner_chip = (
+                f"<span class='chip real'>{_esc(v.winner)} "
+                f"({_esc(side)}) önde</span>"
+            )
+        else:
+            winner_chip = "<span class='chip'>sonuçsuz</span>"
+
+        platform_rows = "".join(
+            f"<tr><td>{_esc(p['platform'])}</td>"
+            f"<td class='num'>{p['composite_lift'] * 100:+.1f}%</td></tr>"
+            for p in v.platform_lifts
         )
         cards.append(f"""
 <div class="verdict">
   <div class="headline">{_esc(v.sentence_tr)}</div>
   <div class="sub" style="margin:0 0 10px">{_esc(v.ab_group)} ·
-    A = <code>{_esc(v.render_variant_a)}</code> (n={v.n_a}, HQS {v.hqs_a:+.3f}) ·
-    B = <code>{_esc(v.render_variant_b)}</code> (n={v.n_b}, HQS {v.hqs_b:+.3f}) ·
+    A = <code>{_esc(v.render_variant_a)}</code> (n={v.n_a}) ·
+    B = <code>{_esc(v.render_variant_b)}</code> (n={v.n_b}) ·
+    bileşik fark <strong>{v.mean_lift * 100:+.1f}%</strong> ·
+    yön birliği {v.platforms_agreeing}/{len(v.platform_lifts)} ·
     {winner_chip} ·
     <span class="chip {'sim' if v.confidence == 'simulated' else 'real'}">
     {_esc(v.confidence)}</span></div>
-  <table><tr><th>metrik</th><th>A z</th><th>B z</th><th>fark payı</th></tr>
+  <table><tr><th>metrik</th><th>ortalama fark (B/A)</th><th>fark payı</th></tr>
   {driver_rows}</table>
+  <table><tr><th>platform</th><th>bileşik fark</th></tr>{platform_rows}</table>
   <ul>{''.join(f"<li>{_esc(c)}</li>" for c in v.caveats)}</ul>
 </div>""")
 
@@ -190,7 +208,11 @@ def _ab_test_block(ab_verdicts: list) -> str:
         "<p class='sub'>Aşağıdaki karşılaştırma hook tipi bazında değil, "
         "<strong>tek bir klibin</strong> iki farklı açılış efektiyle "
         "render edilmiş hallerini birbirine karşı ölçer -- içerik, hook ve "
-        "platform seti sabit; değişen tek şey render_variant.</p>"
+        "platform seti sabit; değişen tek şey render_variant. Platform "
+        "başına tek bir A/B çifti olduğu için karşılaştırma z-skoru değil "
+        "oransal farktır, ve kazanan yalnızca fark materyallik eşiğini "
+        "geçtiğinde <em>ve</em> tüm platformlar aynı yönü gösterdiğinde "
+        "ilan edilir.</p>"
         + "".join(cards)
     )
 

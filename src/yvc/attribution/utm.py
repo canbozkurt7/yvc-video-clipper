@@ -31,6 +31,12 @@ class AttributionKey:
     variant: str
     campaign: str
     run: str = ""
+    # The same clip ships a Turkish and an English post on LinkedIn, so a
+    # click is only attributable if the language is part of the key. It
+    # lives here rather than only in the emitted URL because `parse` is
+    # the documented way back from a click to a decision, and a parameter
+    # this key cannot represent is a parameter the analysis silently loses.
+    lang: str = "tr"
 
     def as_params(self) -> dict[str, str]:
         return {
@@ -40,6 +46,7 @@ class AttributionKey:
             "utm_content": self.clip_id,
             "utm_term": self.hook_type,
             "yvc_v": self.variant,
+            "yvc_lang": self.lang,
             "yvc_run": self.run,
         }
 
@@ -60,6 +67,7 @@ def build(
     variant: str = "A",
     campaign: str = "clips",
     run: str = "",
+    lang: str = "tr",
 ) -> str:
     """Append UTM parameters to a destination URL.
 
@@ -74,6 +82,7 @@ def build(
         variant=slug(variant) or "a",
         campaign=slug(campaign),
         run=slug(run),
+        lang=slug(lang) or "tr",
     )
 
     parts = urlparse(destination)
@@ -105,6 +114,7 @@ def parse(url: str) -> AttributionKey | None:
         variant=first("yvc_v", "a"),
         campaign=first("utm_campaign"),
         run=first("yvc_run"),
+        lang=first("yvc_lang", "tr"),
     )
 
 
@@ -127,6 +137,10 @@ def rows_for_export(posts: list[dict]) -> list[dict]:
             "clip_id": post.get("clip_id"),
             "platform": post.get("platform"),
             "variant": post.get("variant", "A"),
+            # Read back off the URL, not just copied from the post: this
+            # column is what proves the tag actually survived into the
+            # link a viewer will click.
+            "lang": (key.lang if key else post.get("lang")) or "tr",
             "hook_type": key.hook_type if key else "",
             "campaign": key.campaign if key else "",
             "url": post.get("tracking_url", ""),
