@@ -118,9 +118,21 @@ Teslimden önce sırada:
 
 1. **Demo videosu (5-10 dk ekran kaydı)** — zorunlu teslim, henüz yok.
    Çekim listesi hazır: [DEMO.md](DEMO.md).
-2. Klipleri YouTube'a yükle, `remote_ids.json` yaz, kimlik bilgilerini
-   ortama ver, `--from collect --force collect` ile gerçek veriyi çek.
-   Şu an 52 metrik satırının 52'si simülasyon.
+2. ~~Klipleri YouTube'a yükle...~~ **Karar: YouTube'a gerçek yükleme
+   onaylanmadı (28 Ağustos).** Gerçek metrik/hook-motoru geri besleme
+   döngüsü bu onay gelene kadar devre dışı; 52 metrik satırının 52'si
+   simülasyon olarak kalmaya devam ediyor. Alternatif olarak Higgsfield
+   araştırıldı: sosyal bağlayıcıları (X/Threads/Instagram) YouTube'u
+   kapsamıyor ve hiçbir platformda analitik çekmiyor, yani bu döngünün
+   yerini alamıyor — sadece klip sonrası opsiyonel bir görsel
+   düzenleme aracı (Shorts Studio) olarak, manuel/kod-dışı bir adım
+   olarak değerlendirilebilir.
+   Ücretli ama gerçek bir API ile klip düzenleme (restyle) yapan tek
+   ciddi kategori: **Replicate** üzerinden erişilen Runway Aleph 2.0,
+   Kling 3.0 Omni veya Luma Modify Video modelleri — abonelik yok,
+   kullanım başına ödeme, ama hepsi **30 saniye** klip sınırı taşıyor
+   (bizim klipler 36-120 sn, önce parçalara bölüp sonra dikmek gerekir).
+   Higgsfield/Kling'in kendi resmi API'lerinde bu özellik hiç yok.
 3. seg_006 kararı (yukarıda).
 
 ## Açık kalan işler

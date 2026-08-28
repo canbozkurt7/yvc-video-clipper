@@ -182,7 +182,29 @@ def _publish(base: Path, config: dict) -> None:
 
     write_json(base / "publish.json", {"mode": "dry_run", "results": results})
     _write_proof_readme(out_dir, results)
+    _write_attribution_csv(base / "attribution.csv", raw_posts)
     print(f"[publish] {len(results)} posts -> {out_dir}")
+
+
+def _write_attribution_csv(out_path: Path, posts: list[dict]) -> None:
+    """Per-post UTM/attribution rows, emitted every run.
+
+    Written from posts.json rather than publish.json's results so a clip
+    that failed to render still gets a row -- the tracking link is a
+    property of the copy, not of whether the render succeeded, and the
+    csv is meant to be readable before a single click has come in.
+    """
+    import csv
+
+    from yvc.attribution.utm import rows_for_export
+
+    rows = rows_for_export([p for p in posts if p.get("post_id")])
+    if not rows:
+        return
+    with out_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _write_proof_readme(out_dir: Path, results: list[dict]) -> None:

@@ -88,6 +88,28 @@ def test_the_proof_index_names_the_clip_that_has_no_post_id(tmp_path):
     )
 
 
+def test_attribution_csv_covers_every_post_with_a_tracking_url(tmp_path):
+    """attribution.csv is the bonus deliverable for per-clip UTM tracking.
+
+    It has to survive the same partial-copy case the rest of this file
+    tests: c03 never got a post_id, so it never got a tracking_url either,
+    and has no row here -- the csv is about posts that were tagged, not
+    every clip that was attempted."""
+    base = tmp_path / "vid"
+    base.mkdir()
+    _fixture(base)
+
+    run_delivery_stage("publish", base, {})
+
+    import csv
+
+    with (base / "attribution.csv").open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["post_id"] == "c01-instagram-A"
+    assert rows[0]["clip_id"] == "c01"
+
+
 def test_a_post_whose_numbers_failed_the_gate_does_not_read_as_clean(tmp_path):
     """The adapter validates the request, not whether the text is true to
     the clip. Without copywriting's verdict travelling with it, a post
