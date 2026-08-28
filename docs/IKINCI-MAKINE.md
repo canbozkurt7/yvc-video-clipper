@@ -66,15 +66,15 @@ Bu tabloyu bir kez okuyun; iki makine arasında kaybolan tek şey burada.
 
 | Yol | Ne | İkinci makinede ne olur |
 |---|---|---|
-| `work/` | ~1 GB kaynak video, transkript, render edilmiş klipler | Yok. Yeni `run` sıfırdan üretir (~1 sa 50 dk) |
+| `work/` | ~1 GB kaynak video, transkript, render edilmiş klipler | Yok. Yeni `run` sıfırdan üretir: indirme ~15 dk, üstüne ölçülen 29 dk aşama süresi (LLM çağrıları paralelleştikten sonra) |
 | `.yvc/yvc.db` | **Öğrenilen durum:** klipler, hook skorları, metrikler, prior anlık görüntüleri | Boş başlar |
 | `.yvc/llm_cache/` | LLM yanıt önbelleği | Boş başlar; çağrılar yeniden ücretlenir (süre olarak) |
 | `.venv/`, `wheels/`, `tools/bin/` | Ortam ve ikili dosyalar | Kurulum adımları yeniden üretir |
 
 ### `.yvc/yvc.db` — dikkat edilmesi gereken tek şey
 
-Şu an içinde: 10 klip, 60 hook skoru, 100 metrik satırı, 10 prior anlık
-görüntüsü. İki makinede ayrı ayrı `run` çalıştırırsanız bu iki veritabanı
+Şu an içinde: 5 klip, 60 hook skoru, 13 gönderi, 52 metrik satırı,
+2 prior anlık görüntüsü (28 Ağustos koşusu). İki makinede ayrı ayrı `run` çalıştırırsanız bu iki veritabanı
 **sessizce ayrışır** ve geri besleme döngüsü iki farklı geçmişten öğrenir.
 
 > **Bu bölüm güncellendi.** Önceki hâli "risk düşük, çünkü geri besleme
