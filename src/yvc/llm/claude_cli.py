@@ -176,7 +176,23 @@ class ClaudeCLI:
             cmd += ["--model", model]
         # Strip tool access: these are pure text-in/JSON-out calls, and the
         # tool definitions are a large share of the per-call token cost.
-        cmd += ["--allowed-tools", ""]
+        #
+        # `--tools ""` and not `--allowed-tools ""`. The latter is a
+        # permission filter: the definitions are still sent, so the model
+        # still reaches for a tool, the call is denied, and with
+        # --max-turns 1 the turn ends on stop_reason=tool_use having
+        # produced no text. The CLI then exits 1 with an empty stderr,
+        # which surfaces as an unexplained failure. Measured on the six
+        # clips of r39OrneyMDs: --allowed-tools 0/6, --tools 6/6, with
+        # cache_read_input_tokens falling from ~23k to ~2.3k because the
+        # definitions genuinely stop being sent. Raising --max-turns is
+        # not the fix -- it gives the model more turns to keep trying
+        # tools (12 denials over 4 turns in the same test).
+        #
+        # The trigger is the character budget in the copywriting prompt:
+        # asked to hit "max N karakter", the model writes a script to
+        # count for it.
+        cmd += ["--tools", ""]
 
         # NOT subprocess.run(timeout=...). On Windows the command runs as
         # cmd.exe -> claude, and run()'s timeout kills only cmd.exe. The
@@ -213,7 +229,8 @@ class ClaudeCLI:
             if _looks_like_usage_limit(stderr_text):
                 raise LLMTransientError(f"usage limit reached: {stderr_text[:200]}")
             raise LLMTransientError(
-                f"claude exited {proc.returncode}: {stderr_text[:300]}"
+                f"claude exited {proc.returncode}: "
+                f"{stderr_text[:300] or _envelope_hint(stdout)}"
             )
 
         return stdout
@@ -486,6 +503,37 @@ def _balanced_block(text: str) -> str | None:
             if depth == 0:
                 return text[start : index + 1]
     return None
+
+
+def _envelope_hint(stdout: str) -> str:
+    """Why the CLI exited non-zero, when stderr says nothing.
+
+    A failed run still prints its JSON envelope on stdout, and that is
+    where the reason actually lives: a turn that ended on a tool call
+    exits 1 with an empty stderr, so the bare "claude exited 1:" that
+    used to reach the caller named neither the stop reason nor the tool.
+    """
+    try:
+        envelope = json.loads(stdout or "")
+    except (json.JSONDecodeError, TypeError):
+        return "no stderr, no parseable envelope"
+    if not isinstance(envelope, dict):
+        return "no stderr, no parseable envelope"
+    stop = envelope.get("stop_reason")
+    denied = [
+        d.get("tool_name")
+        for d in envelope.get("permission_denials") or []
+        if isinstance(d, dict)
+    ]
+    hint = f"no stderr; stop_reason={stop!r}"
+    if denied:
+        hint += f", denied tool calls: {', '.join(filter(None, denied))}"
+    if stop == "tool_use":
+        hint += (
+            " -- the model tried to call a tool and the turn ended there; "
+            "the tool set should be empty (--tools \"\")"
+        )
+    return hint
 
 
 def _looks_like_usage_limit(text: str) -> bool:
