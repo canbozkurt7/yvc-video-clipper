@@ -13,7 +13,21 @@ most are flagged inline.
 
 from __future__ import annotations
 
+import re
+
 from yvc.publish.base import BaseAdapter, HttpCall, PublishRequest, ValidationIssue
+
+_URL = re.compile(r"https?://\S+")
+
+
+def _urls_as_23(text: str) -> str:
+    """Text with every URL replaced by a 23-character stand-in.
+
+    X wraps links in t.co, so a URL costs 23 characters whatever its
+    real length. A UTM-tagged link is nearer 130, and counting it in
+    full rejects tweets that would have posted.
+    """
+    return _URL.sub("x" * 23, text)
 
 
 class LinkedInAdapter(BaseAdapter):
@@ -278,8 +292,12 @@ class XAdapter(BaseAdapter):
         return ["X_CONSUMER_KEY", "X_CONSUMER_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_SECRET"]
 
     def validate(self, req: PublishRequest) -> list[ValidationIssue]:
-        # A URL always counts as 23 characters regardless of real length.
-        effective = len(req.text)
+        # A URL always counts as 23 characters regardless of real length,
+        # and that rule applies to URLs inside the body too -- counting
+        # those in full made a 289-character tweet with a long UTM link
+        # look like it was over the limit by more than it was, while the
+        # copy stage, which did apply the rule, called the same text fine.
+        effective = len(_urls_as_23(req.text))
         if req.tracking_url:
             effective += 24
         issues = []

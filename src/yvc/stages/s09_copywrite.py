@@ -46,10 +46,15 @@ PLATFORM_SPECS = {
         "cta": "Kaydet / profildeki link",
     },
     "x": {
-        "max": 280, "target": (200, 265), "hashtags": (1, 2),
+        # The publisher appends the tracking link as its own line, and X
+        # counts any URL as 23 characters plus the separator. The body
+        # therefore has 256 to work with, not 280: writing to the full
+        # limit and finding the overflow at publish time is too late,
+        # because by then there is nobody left to rewrite it.
+        "max": 280, "reserved": 24, "target": (180, 240), "hashtags": (1, 2),
         "tone": "Keskin, iddialı, rakam önde",
-        "layout": "Tek tweet; link 23 karakter sayılır",
-        "cta": "Link ile bitir",
+        "layout": "Tek tweet; linki YAZMA, yayıncı sonuna kendisi ekliyor",
+        "cta": "Rakamla veya iddiayla bitir; link otomatik ekleniyor",
     },
     "tiktok": {
         "max": 2200, "target": (80, 150), "hashtags": (3, 5),
@@ -64,6 +69,23 @@ PLATFORM_SPECS = {
         "cta": "Abone ol + link",
     },
 }
+
+# Platforms whose adapter appends req.tracking_url to the text it sends
+# (see yvc.publish.adapters). Instagram and TikTok do not: links are not
+# clickable there, which is why their CTA points at the profile instead.
+LINK_APPENDED_BY_PUBLISHER = frozenset({"x", "linkedin", "youtube"})
+
+
+def body_budget(spec: dict) -> int:
+    """Characters the body may use, after the link the publisher appends.
+
+    The copy and the publish adapter have to agree on what the post is.
+    They did not: copy was written to the platform limit, then publish
+    appended the tracking link and X rejected the result -- at the one
+    point in the pipeline where nothing can be rewritten.
+    """
+    return spec["max"] - spec.get("reserved", 0)
+
 
 BANNED_DEFAULT = [
     "bu videoda", "kaçırmayın", "mutlaka izleyin", "inanılmaz",
@@ -100,7 +122,10 @@ KANCA TİPİ: {hook_type}
 KANCA CÜMLESİ: {hook_line}
 MARKA: {brand} — {persona}
 HEDEF KİTLE: {audience}
-LİNK: {link}
+
+LİNK: Metnin içine link YAZMA. Yayıncı, her platformun kendi takip
+linkini metnin sonuna kendisi ekliyor; sen de yazarsan link iki kez
+çıkar ve X'te sınır aşılır. Referans olsun diye: {link}
 
 ZORUNLU KANIT ALANLARI:
 - evidence_quote: Yukarıdaki klip metninden BİREBİR kopyalanmış, en az 6 kelimelik
@@ -193,14 +218,26 @@ def validate_copy(
 
     # Numbers must come from the clip, not the model's imagination.
     if copy.key_number:
-        digits = re.sub(r"[^\d]", "", copy.key_number)
-        if digits:
-            in_digits = digits in re.sub(r"[^\d]", "", clip_text)
-            in_words = int(digits) in _spelled_numbers(clip_text)
-            if not in_digits and not in_words:
-                issues.append({"code": "NUMBER_HALLUCINATION", "severity": "error",
-                               "detail": f"key_number {copy.key_number!r} appears in the "
-                                         "clip neither as digits nor as Turkish words"})
+        # Each cited number is checked on its own. Squashing the whole
+        # field into one digit string turned "18 milyon / 30 milyon" --
+        # both of them said in the clip -- into a search for "1830", and
+        # the gate rejected grounded copy. A gate with false positives
+        # gets ignored, which costs more than the gate is worth.
+        clip_digits = re.sub(r"[^\d]", "", clip_text)
+        spelled = _spelled_numbers(clip_text)
+        missing = []
+        for token in re.findall(r"\d[\d.,]*", copy.key_number):
+            digits = re.sub(r"[^\d]", "", token)
+            if not digits:
+                continue
+            if digits in clip_digits or int(digits) in spelled:
+                continue
+            missing.append(token)
+        if missing:
+            issues.append({"code": "NUMBER_HALLUCINATION", "severity": "error",
+                           "detail": f"key_number {copy.key_number!r}: "
+                                     f"{', '.join(missing)} appears in the clip "
+                                     "neither as digits nor as Turkish words"})
 
     bodies: dict[str, str] = {}
     for platform, spec in PLATFORM_SPECS.items():
@@ -210,9 +247,19 @@ def validate_copy(
         length = len(block.body)
         if platform == "x" and "http" in block.body:
             length = len(re.sub(r"https?://\S+", "x" * 23, block.body))
-        if length > spec["max"]:
+        budget = body_budget(spec)
+        if length > budget:
             issues.append({"code": "LEN_OVER", "severity": "error",
-                           "detail": f"{platform}: {length} > {spec['max']}"})
+                           "detail": f"{platform}: {length} > {budget}"})
+
+        if platform in LINK_APPENDED_BY_PUBLISHER and "http" in block.body:
+            # Caught here rather than at publish because here there is
+            # still a rewrite attempt left.
+            issues.append({
+                "code": "LINK_IN_BODY", "severity": "error",
+                "detail": f"{platform}: the publisher appends the tracking "
+                          "link, so a link in the body is posted twice",
+            })
 
         low, high = spec["hashtags"]
         if not (low <= len(block.hashtags) <= high):
@@ -266,7 +313,8 @@ def write_copy(
     banned = brand.get("banned_phrases", BANNED_DEFAULT)
 
     specs_text = "\n".join(
-        f"- {name}: max {s['max']} karakter, hedef {s['target'][0]}-{s['target'][1]}, "
+        f"- {name}: max {body_budget(s)} karakter, "
+        f"hedef {s['target'][0]}-{s['target'][1]}, "
         f"{s['hashtags'][0]}-{s['hashtags'][1]} hashtag. Ton: {s['tone']}. "
         f"Düzen: {s['layout']}. CTA: {s['cta']}"
         for name, s in PLATFORM_SPECS.items()
@@ -305,7 +353,14 @@ def write_copy(
                     f"copy.{clip['clip_id']}.a{attempt}", prompt, ClipCopy, model=model
                 )
             except LLMError as exc:
-                issues = [{"code": "LLM_FAILED", "severity": "error", "detail": str(exc)[:200]}]
+                # Appended, not assigned: on the repair attempt this used
+                # to erase the validation errors that prompted the repair,
+                # leaving copy on disk whose recorded problem was "the
+                # model did not answer" rather than what was wrong with it.
+                issues = issues + [
+                    {"code": "LLM_FAILED", "severity": "error",
+                     "detail": str(exc)[:200]}
+                ]
                 break
 
             copy_obj = result.data

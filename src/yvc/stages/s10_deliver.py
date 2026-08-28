@@ -70,13 +70,44 @@ def _schedule(base: Path, config: dict) -> None:
     print(f"[schedule] {len(rows)} posts scheduled")
 
 
+def _posts_by_id(posts: list[dict]) -> dict:
+    """Index posts.json by post_id, skipping rows that never got one.
+
+    A clip whose copy failed is written out as {clip_id, status, issues}:
+    there is no post to identify, so there is no post_id. Both publish
+    and collect index by post_id, and both raised a bare KeyError on the
+    first such row -- one failed clip taking down ten good posts, which
+    is the opposite of the per-item degradation the stage intends.
+    """
+    return {p["post_id"]: p for p in posts if p.get("post_id")}
+
+
 def _publish(base: Path, config: dict) -> None:
-    posts = {p["post_id"]: p for p in read_json(base / "posts.json")["posts"]}
+    raw_posts = read_json(base / "posts.json")["posts"]
+    posts = _posts_by_id(raw_posts)
     scheduled = {s["post_id"]: s for s in read_json(base / "schedule.json")["scheduled"]}
     render = {r["clip_id"]: r for r in read_json(base / "render.json")["results"]}
 
     out_dir = base / "publish"
     results = []
+
+    for post in raw_posts:
+        if post.get("post_id"):
+            continue
+        # Counted, not dropped: publish.json accounts for every row in
+        # posts.json or it cannot be read as a record of the run.
+        results.append({
+            "post_id": None,
+            "clip_id": post.get("clip_id"),
+            "platform": None,
+            "status": "skipped_no_copy",
+            "detail": "copywrite produced no text for this clip",
+            "issues": post.get("issues", []),
+        })
+        print(
+            f"[publish] {str(post.get('clip_id')):28s} skipped  "
+            "no copy was written for this clip"
+        )
 
     for post_id, post in posts.items():
         if post.get("status") != "ok":
@@ -117,11 +148,20 @@ def _publish(base: Path, config: dict) -> None:
 
         result = DryRunAdapter(adapter, out_dir).publish(request)
         errors = [i for i in result.issues if i.severity == "error"]
+        # The adapter validates the request; it has no view on whether
+        # the text is grounded in the clip. Carrying copywriting's own
+        # verdict through means a post whose numbers failed the
+        # hallucination gate cannot read as clean here.
+        copy_errors = [
+            i for i in post.get("validation", {}).get("issues", [])
+            if i.get("severity") == "error"
+        ]
         results.append({
             "post_id": post_id,
             "platform": post["platform"],
             "status": result.status,
             "mode": "dry_run",
+            "copy_validation_errors": copy_errors,
             "missing_credentials": missing,
             "calls": len(result.calls),
             "issues": [i.__dict__ for i in result.issues],
@@ -136,6 +176,7 @@ def _publish(base: Path, config: dict) -> None:
         print(
             f"[publish] {post_id:28s} {result.status:8s} "
             f"{len(result.calls)} calls, {len(errors)} errors"
+            + (f", {len(copy_errors)} copy errors" if copy_errors else "")
             + (f", missing creds: {missing}" if missing else "")
         )
 
@@ -160,7 +201,8 @@ def _write_proof_readme(out_dir: Path, results: list[dict]) -> None:
     for r in results:
         creds = ", ".join(r.get("missing_credentials") or []) or "-"
         lines.append(
-            f"| {r['post_id']} | {r['platform']} | {r['status']} | "
+            f"| {r.get('post_id') or r.get('clip_id') or '-'} "
+            f"| {r.get('platform') or '-'} | {r['status']} | "
             f"{r.get('calls', 0)} | {creds} |"
         )
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -196,7 +238,7 @@ def _collect(base: Path, config: dict) -> None:
     from yvc.metrics.collectors import collector_status, get_collector
     from yvc.metrics.simulator import SCHEMA_FIELDS, SimContext, row_provenance, simulate
 
-    posts = {p["post_id"]: p for p in read_json(base / "posts.json")["posts"]}
+    posts = _posts_by_id(read_json(base / "posts.json")["posts"])
     published = read_json(base / "publish.json")["results"]
     render = {r["clip_id"]: r for r in read_json(base / "render.json")["results"]}
     overrides = _remote_id_overrides(base)
