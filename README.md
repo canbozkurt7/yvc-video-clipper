@@ -28,7 +28,7 @@ credentials exist.
 
 ## Quick start
 
-On a fresh Windows machine, three commands:
+On a fresh **Windows** machine, three commands:
 
 ```powershell
 git clone https://github.com/canbozkurt7/yvc-video-clipper.git
@@ -58,6 +58,24 @@ cd yvc-video-clipper
 .venv\Scripts\yvc.exe run "https://www.youtube.com/watch?v=<id>"
 ```
 
+On **macOS**, the same three steps with the bash installer:
+
+```bash
+git clone https://github.com/canbozkurt7/yvc-video-clipper.git
+```
+
+```bash
+bash yvc-video-clipper/tools/install.sh
+```
+
+```bash
+claude
+```
+
+then `cd yvc-video-clipper && .venv/bin/yvc run "<url>"`. Read
+[Platform support](#platform-support) first — the brand font needs one
+edit on a Mac, and the installer says so before you start a run.
+
 Nothing after that needs a keystroke. No config file needs editing —
 `cpu_threads` resolves to the machine's physical core count on its own.
 Publishing defaults to dry-run, so this is safe to run end to end before
@@ -78,15 +96,47 @@ publish payloads in `publish/`.
 | yt-dlp | Installed by `tools/bootstrap.py` into `tools/bin/`, or supply a path in `config/config.yaml` |
 | Deno | Installed by the same script. Required by yt-dlp to solve YouTube's n-signature challenge — without it only 360p formats resolve, with no error. See Troubleshooting |
 | `claude` CLI | Authenticated. Used as the LLM engine; no API key needed |
-| A Turkish-capable font | Resolved from the system font directory, not shipped. Automatic on Windows; see [NOTICE.md](NOTICE.md) elsewhere |
+| A Turkish-capable font | Resolved from the system font directory, not shipped. Automatic on Windows; **must be supplied on macOS** — see below and [NOTICE.md](NOTICE.md) |
 
 CPU-only by design. There is no GPU dependency anywhere in the pipeline.
 
-Developed and verified on Windows 11. The pipeline is not
-platform-independent yet: process-tree termination (`taskkill`), the npm
-shim invocation of the `claude` CLI, and the run lock (`msvcrt`) are
-Windows-specific. Everything else — ffmpeg, faster-whisper, the scoring
-and selection logic — is portable.
+### Platform support
+
+**Windows 10/11** — developed here, and the only platform the pipeline has
+actually been run on end to end.
+
+**macOS** — supported, and honestly labelled: every platform-specific
+branch in the code has a working non-Windows path, but no full run has
+been executed on a Mac. What that claim rests on, measured rather than
+assumed:
+
+- No Windows-only stdlib import anywhere in the package (`msvcrt`,
+  `winreg`, `_winapi`); all 42 modules import cleanly.
+- Process-tree termination is branched: `taskkill` on `nt`, `proc.kill()`
+  elsewhere — and the tree only has a grandchild to chase on Windows,
+  where `claude` is an npm `.cmd` shim routed through `cmd.exe`. On macOS
+  it is executed directly, so there is nothing extra to kill.
+- `tools/bootstrap.py` already resolves Darwin arm64/x86_64 builds of
+  yt-dlp and Deno, and writes them without the `.exe` suffix.
+- `src/yvc/render/fonts.py` already searches `~/Library/Fonts`,
+  `/Library/Fonts` and `/System/Library/Fonts`.
+- `yvc doctor` is platform-neutral (`shutil.which`, `os.pathsep`,
+  `ffmpeg -buildconf`).
+
+The one thing that **will** stop a Mac run is the brand font.
+`config/brand.json` names Segoe UI Black, which ships with Windows only.
+Render fails loudly with `FontNotFound` rather than substituting, because
+libass would otherwise pick a fallback lacking ğ/ş/ı and burn tofu boxes
+into a clip nobody inspects until after publishing. `tools/install.sh`
+warns about this before the run. To fix it, put a Turkish-capable `.ttf`
+in `assets/fonts/` and update **both** `fonts.display` (the filename) and
+`fonts.display_family` (the family name inside the font's `name` table) —
+a mismatch between them is exactly what makes libass substitute silently.
+
+**Linux** — not supported. Nothing in the code obviously prevents it, but
+it is untested and the font and encoder assumptions have never been
+exercised there, so `tools/install.sh` refuses to run rather than imply
+otherwise.
 
 ---
 
@@ -106,15 +156,30 @@ Then clip a video by asking in plain language, or:
 /yvc:clip https://www.youtube.com/watch?v=<id>
 ```
 
-The skill locates or installs a working checkout, runs `doctor`, sets
-expectations about the ~1h50m runtime, and reports what came out. It
-deliberately installs the checkout **outside** the plugin cache: a run
-writes ~1 GB into `work/`, and a plugin update would wipe it.
+Works on Windows and macOS; the skill detects which and picks the right
+installer and entry-point path. See
+[Platform support](#platform-support) for what "macOS supported" does and
+does not claim.
 
-> This repository is private. `/plugin marketplace add` uses your existing
-> git credentials, so it works for you and anyone you invite as a
-> collaborator. Make the repo public if you want it to work for anyone
-> with the link.
+> `/plugin marketplace add` uses your existing git credentials. While this
+> repository is private it therefore works for the owner and any invited
+> collaborator; once it is public it works for anyone with the link.
+
+The skill locates or installs a working checkout, runs `doctor`, sets
+expectations about the ~1h50m runtime, and reports what came out.
+
+Two things about *where* it installs, both measured rather than assumed:
+
+- The checkout goes **outside** the plugin cache. A run writes ~1 GB into
+  `work/`, and a plugin update wipes the cache.
+- It installs **from** the marketplace clone when there is one. A
+  marketplace install copies only the plugin's own directory into
+  `${CLAUDE_PLUGIN_ROOT}` — `.claude-plugin/`, `commands/`, `skills/` and
+  nothing else — but a git-source marketplace separately leaves a full
+  clone of the repo at `<config>/plugins/marketplaces/<marketplace>/`.
+  The installers' `-Source` / `--source` flag points at that clone, which
+  skips a second full-repo download and is the only path that works for a
+  private repo on a machine with no git credentials.
 
 ### Or install directly
 
@@ -123,15 +188,29 @@ git clone https://github.com/canbozkurt7/yvc-video-clipper.git
 ./yvc-video-clipper/tools/install.ps1
 ```
 
-`install.ps1` is idempotent — re-running it pulls, re-verifies and repairs.
-It creates the virtualenv, installs the package, fetches yt-dlp and Deno,
-and runs `doctor`. If pip cannot reach PyPI (TLS interception — see below)
-it falls back to the curl-based wheelhouse automatically.
+```bash
+git clone https://github.com/canbozkurt7/yvc-video-clipper.git
+bash yvc-video-clipper/tools/install.sh
+```
 
-It also installs the three prerequisites that cannot ship in a git repo —
-**Python 3.12**, **ffmpeg**, and the **`claude` CLI** — via winget and
-npm. Pass `-NoInstall` to have them reported rather than installed, for
-machines where those are managed by something else.
+Both installers are idempotent — re-running one pulls, re-verifies and
+repairs. Each creates the virtualenv, installs the package, fetches yt-dlp
+and Deno, and runs `doctor`. Both verify rather than trust: they probe the
+real imports and the entry point afterwards, because `pip install --no-deps`
+will happily install the package alone and report success.
+
+They also install the three prerequisites that cannot ship in a git repo —
+**Python 3.12**, **ffmpeg** (with `libass`, which is checked, not just
+assumed present), and the **`claude` CLI** — via winget/npm on Windows and
+Homebrew/npm on macOS. Pass `-NoInstall` / `--no-install` to have them
+reported rather than installed, for machines where those are managed by
+something else.
+
+`install.ps1` carries one thing its macOS sibling does not: a three-rung
+pip ladder for a TLS-intercepting proxy, ending in a curl-based wheelhouse
+(see below). That is a property of one corporate Windows network, so
+`install.sh` does a single `pip install -e .` and reports the failure
+instead of guessing at a workaround nobody has been able to test.
 
 The only step left to a human is **signing in to `claude`**: run it once
 and authenticate in the browser. Nothing else in setup is manual.

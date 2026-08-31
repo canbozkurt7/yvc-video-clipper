@@ -6,17 +6,29 @@
   },
   "metadata": {
     "description": "Content operations tooling from Datassist.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "yvc",
       "source": "./plugins/yvc",
-      "description": "Turn one long-form video into publishable social clips: transcription, hook scoring, hook-anchored selection, vertical reframing, captions, per-platform copy and measurement. Publishing defaults to dry-run.",
-      "version": "1.0.0",
+      "description": "Turn one long-form video into publishable social clips: transcription, hook scoring, hook-anchored selection, vertical reframing, captions, per-platform copy and measurement. Windows and macOS. Publishing defaults to dry-run.",
+      "version": "1.1.0",
       "category": "content",
-      "tags": ["video", "clips", "shorts", "social", "turkish", "whisper", "ffmpeg"],
-      "author": { "name": "Datassist" },
+      "tags": [
+        "video",
+        "clips",
+        "shorts",
+        "social",
+        "turkish",
+        "whisper",
+        "ffmpeg",
+        "windows",
+        "macos"
+      ],
+      "author": {
+        "name": "Datassist"
+      },
       "license": "MIT",
       "homepage": "https://github.com/canbozkurt7/yvc-video-clipper"
     }

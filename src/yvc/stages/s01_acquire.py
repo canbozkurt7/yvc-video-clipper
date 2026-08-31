@@ -61,6 +61,41 @@ def _ffmpeg_dir() -> str | None:
     return str(Path(found).parent) if found else None
 
 
+def _yt_dlp_path(configured: str) -> str:
+    """Resolve the yt-dlp executable, honouring an explicit config path.
+
+    Searched the same way ``doctor`` searches, and for the same reason it
+    gives: a run that resolves its binaries differently from the doctor
+    that cleared it is reporting on a different machine than the one it
+    runs on.
+
+    Letting ``shutil.which`` pick the filename is also what makes this
+    work off Windows. ``tools/bootstrap.py`` writes ``yt-dlp.exe`` there
+    and ``yt-dlp`` everywhere else, so hardcoding the ``.exe`` meant the
+    vendored binary was invisible on macOS -- and the fallback to a bare
+    ``yt-dlp`` on PATH then failed on a machine whose only copy was the
+    vendored one.
+    """
+    import shutil
+
+    tools = Path("tools/bin").resolve()
+    path = str(tools) + os.pathsep + os.environ.get("PATH", "")
+
+    # The configured value first, then the plain name. A config that pins a
+    # path which has since moved is a stale pin, not an instruction to fail:
+    # searching for the stale *path* only rediscovers that it is gone, so
+    # the fallback has to search for the name instead.
+    for candidate in (configured, "yt-dlp"):
+        if not candidate:
+            continue
+        if Path(candidate).exists():
+            return candidate
+        found = shutil.which(candidate, path=path)
+        if found:
+            return found
+    return "yt-dlp"
+
+
 def _run(cmd: list[str], timeout: int = 5400) -> subprocess.CompletedProcess:
     env = child_env()
     # Prepend the vendored binaries so a bundled Deno satisfies the
@@ -99,9 +134,7 @@ def acquire(url: str, base: Path, config: dict) -> dict:
     source = base / "source.mp4"
     audio = base / "audio16k_raw.wav"
 
-    yt_dlp = config.get("source", {}).get("yt_dlp_path") or "yt-dlp"
-    if not Path(yt_dlp).exists() and Path("tools/bin/yt-dlp.exe").exists():
-        yt_dlp = str(Path("tools/bin/yt-dlp.exe").resolve())
+    yt_dlp = _yt_dlp_path(config.get("source", {}).get("yt_dlp_path") or "")
 
     fmt = config.get("source", {}).get(
         "format",

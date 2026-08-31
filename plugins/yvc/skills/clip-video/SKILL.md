@@ -14,35 +14,87 @@ then run it and interpret what it reports. **Do not reimplement any stage
 yourself** — the value is in the scoring and selection logic that already
 exists.
 
+## Platform
+
+Windows and macOS. The two differ only in the installer to call and the
+path to the entry point, so every command below is given twice — pick the
+line for the machine you are on and use it consistently.
+
+| | Windows | macOS |
+|---|---|---|
+| installer | `tools\install.ps1` | `tools/install.sh` |
+| entry point | `.venv\Scripts\yvc.exe` | `.venv/bin/yvc` |
+| prerequisites via | winget + npm | Homebrew + npm |
+
+Linux is not supported. Say so plainly rather than improvising: the font
+and encoder assumptions have never been exercised there.
+
 ## Step 1 — find or install the checkout
 
 The pipeline needs a real working directory, not the plugin cache: a run
-writes ~1 GB of video into `work/` and a plugin update would wipe it.
+writes ~1 GB of video into `work/`, and a plugin update wipes the cache.
+So the checkout always lives outside it. Set `$YVC` to that directory once
+and reuse it in every later step.
 
 Look for an existing checkout in this order:
 
-1. `$env:YVC_HOME`
+1. `$env:YVC_HOME` / `$YVC_HOME`
 2. `~/yvc-video-clipper`
 
-If neither exists, install it. **A marketplace install only copies this
-skill's own directory into the plugin cache — it never brings the rest
-of the repo, so `tools/install.ps1` is never present next to
-`${CLAUDE_PLUGIN_ROOT}`.** Always fetch the pipeline itself from GitHub
-and run its installer from there:
+If one exists, that is your `$YVC`. If neither does, install — and prefer
+running the installer over guessing at state, because it is idempotent:
+on an existing checkout it just pulls and re-verifies.
+
+**Where to install *from* matters, and the answer is measured rather than
+assumed.** A marketplace install copies only the plugin's own directory
+into `${CLAUDE_PLUGIN_ROOT}`, which is
+`<config>/plugins/cache/<marketplace>/<plugin>/<version>` and holds just
+`.claude-plugin/`, `commands/` and `skills/`. There is no `tools/` or
+`src/` beside it, so `${CLAUDE_PLUGIN_ROOT}/../../tools/install.ps1` does
+not resolve — do not try it.
+
+But a **git-source** marketplace also leaves a full clone of the repo at
+`<config>/plugins/marketplaces/<marketplace>/`, and that clone does have
+`tools/` and `src/`. When it is there, install from it: the installer's
+`-Source` / `--source` flag exists for exactly this, and it saves a
+second network clone of the whole repo. It also works when the reviewer
+has no git credentials for a private repo.
+
+Derive the clone path from `${CLAUDE_PLUGIN_ROOT}` rather than hardcoding
+`~/.claude`, since the config directory can be relocated:
 
 ```powershell
-git clone https://github.com/canbozkurt7/yvc-video-clipper.git "$HOME\yvc-video-clipper"
-& "$HOME\yvc-video-clipper\tools\install.ps1"
+$pr    = Get-Item $env:CLAUDE_PLUGIN_ROOT
+$clone = Join-Path $pr.Parent.Parent.Parent.Parent.FullName `
+                   "marketplaces\$($pr.Parent.Parent.Name)"
+$YVC   = if ($env:YVC_HOME) { $env:YVC_HOME } else { Join-Path $HOME 'yvc-video-clipper' }
+
+if (Test-Path (Join-Path $clone 'tools\install.ps1')) {
+    & (Join-Path $clone 'tools\install.ps1') -Dest $YVC -Source $clone
+} else {
+    git clone https://github.com/canbozkurt7/yvc-video-clipper.git $YVC
+    & (Join-Path $YVC 'tools\install.ps1') -Dest $YVC
+}
 ```
 
-(Honor `$env:YVC_HOME` as the destination instead, if it is set.)
+```bash
+PR="$CLAUDE_PLUGIN_ROOT"
+CLONE="$(dirname "$(dirname "$(dirname "$(dirname "$PR")")")")/marketplaces/$(basename "$(dirname "$(dirname "$PR")")")"
+YVC="${YVC_HOME:-$HOME/yvc-video-clipper}"
 
-The installer is idempotent — running it on an existing checkout just
-pulls and re-verifies, so prefer running it over guessing at state.
+if [ -f "$CLONE/tools/install.sh" ]; then
+    bash "$CLONE/tools/install.sh" --dest "$YVC" --source "$CLONE"
+else
+    git clone https://github.com/canbozkurt7/yvc-video-clipper.git "$YVC"
+    bash "$YVC/tools/install.sh" --dest "$YVC"
+fi
+```
 
-It installs the three prerequisites that cannot ship in a git repo —
-Python 3.12 (3.13 has no wheel for the pinned CTranslate2), ffmpeg with
-libass, and the `claude` CLI — via winget and npm.
+The installer handles the three prerequisites that cannot ship in a git
+repo — Python 3.12 (3.13 has no wheel for the pinned CTranslate2), ffmpeg
+built with libass, and the `claude` CLI. If it could not install one (no
+winget, no Homebrew, a locked-down machine), it says so per item rather
+than failing obscurely. Report what it said verbatim.
 
 One thing is left to the user, and it blocks the run: **signing in to
 `claude`**. It is a browser round-trip. If `yvc doctor` reports the CLI
@@ -50,14 +102,26 @@ as failing, **stop and tell the user to run `claude` once and sign in**;
 do not try to work around it, and do not look for an API key — there
 isn't one, the CLI is the LLM engine.
 
-If the installer could not install something (no winget, or a locked-down
-machine), it says so per item rather than failing obscurely. Report what
-it said verbatim.
+**On macOS, expect one more thing to be missing.** `config/brand.json`
+names Segoe UI Black, which ships with Windows and is not present on a
+Mac. The render stage stops with `FontNotFound` rather than substituting
+silently, because libass would otherwise pick a fallback lacking ğ/ş/ı
+and burn tofu boxes into a clip nobody inspects until after it is
+published. `install.sh` warns about this up front. The fix is to put a
+Turkish-capable `.ttf` in `assets/fonts/` and update **both**
+`fonts.display` (the filename) and `fonts.display_family` (the family
+name inside the font's `name` table) in `config/brand.json` — they must
+change together, since a mismatch is precisely what makes libass
+substitute without complaining.
 
 ## Step 2 — run doctor before a long run
 
 ```powershell
-& "$YVC/.venv/Scripts/yvc.exe" doctor
+& "$YVC\.venv\Scripts\yvc.exe" doctor
+```
+
+```bash
+"$YVC/.venv/bin/yvc" doctor
 ```
 
 Doctor probes ffmpeg's filters, the `claude` CLI's invocation form, font
@@ -65,10 +129,17 @@ glyph coverage for `ç ğ ı İ ö ş ü`, and free disk. It exists so setup
 problems surface in seconds instead of ninety minutes into transcription.
 If it fails, fix what it names before running anything else.
 
+Run it from inside `$YVC`: it resolves `tools/bin`, `config/` and
+`assets/` relative to the working directory, as the pipeline itself does.
+
 ## Step 3 — run the pipeline
 
 ```powershell
-& "$YVC/.venv/Scripts/yvc.exe" run "<url>"
+& "$YVC\.venv\Scripts\yvc.exe" run "<url>"
+```
+
+```bash
+"$YVC/.venv/bin/yvc" run "<url>"
 ```
 
 Set expectations **before** starting, because this is slow and the user
