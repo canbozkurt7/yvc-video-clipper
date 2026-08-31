@@ -235,12 +235,20 @@ step 'Binaries (yt-dlp, Deno)'
 # a loud failure ninety minutes into a run is still a wasted run, so say
 # so here instead.
 step 'Brand font'
-FONT="$(python3 - <<'PY' 2>/dev/null || true
+# Read with the venv interpreter, not `python3`: it was created and
+# verified two steps above, so it is certain to exist, and it is the
+# interpreter the pipeline itself will run on.
+FONT="$("$VPY" - <<'PY' 2>/dev/null || true
 import json
 print(json.load(open("config/brand.json", encoding="utf-8"))["fonts"]["display"])
 PY
 )"
-if [ -n "$FONT" ] && [ ! -f "assets/fonts/$FONT" ] \
+if [ -z "$FONT" ]; then
+    # Say so rather than pass quietly. A check whose whole job is to warn
+    # must not fall silent when it cannot run.
+    warn 'could not read fonts.display from config/brand.json; skipping the'
+    warn '  brand-font check. Run `yvc doctor` to see the font state.'
+elif [ ! -f "assets/fonts/$FONT" ] \
    && [ ! -f "/Library/Fonts/$FONT" ] && [ ! -f "$HOME/Library/Fonts/$FONT" ] \
    && [ ! -f "/System/Library/Fonts/$FONT" ]; then
     warn "brand font '$FONT' is not on this machine (it ships with Windows)"
@@ -253,7 +261,7 @@ if [ -n "$FONT" ] && [ ! -f "assets/fonts/$FONT" ] \
     warn "  display_family is the family name inside the font's name table,"
     warn '  and a mismatch is what makes libass substitute silently.'
 else
-    [ -n "$FONT" ] && ok "brand font '$FONT' resolves"
+    ok "brand font '$FONT' resolves"
 fi
 
 if [ "$SKIP_DOCTOR" -eq 0 ]; then
