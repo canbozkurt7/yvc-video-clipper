@@ -1,0 +1,17 @@
+{
+  "seq": 2,
+  "label": "upload_bytes",
+  "method": "PUT",
+  "url": "{resumable_session_uri}",
+  "headers": {
+    "Content-Type": "video/mp4",
+    "Content-Length": "18372495"
+  },
+  "query": {},
+  "body": {
+    "$binary_ref": "work\\r39OrneyMDs\\clips\\c01b\\clip.mp4"
+  },
+  "body_kind": "binary",
+  "would_send_bytes": 18372495,
+  "note": "8 MB chunks; resume on HTTP 308."
+}

@@ -1,0 +1,22 @@
+{
+  "seq": 11,
+  "label": "create_tweet",
+  "method": "POST",
+  "url": "https://api.x.com/2/tweets",
+  "headers": {
+    "Authorization": "***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "text": "Türkiye'de bazı niş sektörlerde ücretler, Avrupa'nın 2-3 ülkesi dışında hepsinden yüksek. Ucuz finansman dönemi bitti, o artışları artık sürdüremiyoruz. Nitelikli işgücü kaybı mı, yoksa gündem mi?\nhttps://www.datassist.com.tr/?utm_source=x&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c05&utm_term=data_number&yvc_v=A&yvc_lang=tr",
+    "media": {
+      "media_ids": [
+        "{media_id}"
+      ]
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

@@ -1,0 +1,19 @@
+{
+  "seq": 2,
+  "label": "create_container",
+  "method": "POST",
+  "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "media_type": "REELS",
+    "video_url": "{MEDIA_PUBLIC_BASE_URL}/clip.mp4",
+    "caption": "Türkiye'de 30 milyon ücretlinin 18 milyonu asgari ücret civarında 📊\nAsgari ücretin toplam ücretler içindeki payı 2011-14'ten bugüne %60'ların üzerine çıktı.\nAma Iğdır'la İstanbul aynı değil — şehir bilgisi olmadan yorum eksik kalıyor.\n\n#AsgariÜcret #Bordro #İK #ÜcretPolitikası #İnsanKaynakları #Datassist #ÜcretYönetimi #KOBİ #Maaş #TürkiyeEkonomisi",
+    "share_to_feed": "true"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 15034280,
+  "note": "Asynchronous: returns a creation_id that must be polled."
+}

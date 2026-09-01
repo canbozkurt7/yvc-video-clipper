@@ -1,0 +1,291 @@
+{
+  "post_id": "c05-linkedin-A",
+  "platform": "linkedin",
+  "status": "dry_run",
+  "mode": "dry_run",
+  "calls": [
+    {
+      "seq": 1,
+      "label": "initialize_upload",
+      "method": "POST",
+      "url": "https://api.linkedin.com/rest/videos?action=initializeUpload",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "LinkedIn-Version": "202506",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "initializeUploadRequest": {
+          "owner": "<LINKEDIN_ORG_URN>",
+          "fileSizeBytes": 38122994,
+          "uploadCaptions": false,
+          "uploadThumbnail": false
+        }
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": "Returns a video URN plus per-part upload instructions."
+    },
+    {
+      "seq": 2,
+      "label": "upload_part_1",
+      "method": "PUT",
+      "url": "{uploadInstructions[0].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 0,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 3,
+      "label": "upload_part_2",
+      "method": "PUT",
+      "url": "{uploadInstructions[1].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 4194304,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 4,
+      "label": "upload_part_3",
+      "method": "PUT",
+      "url": "{uploadInstructions[2].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 8388608,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 5,
+      "label": "upload_part_4",
+      "method": "PUT",
+      "url": "{uploadInstructions[3].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 12582912,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 6,
+      "label": "upload_part_5",
+      "method": "PUT",
+      "url": "{uploadInstructions[4].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 16777216,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 7,
+      "label": "upload_part_6",
+      "method": "PUT",
+      "url": "{uploadInstructions[5].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 20971520,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 8,
+      "label": "upload_part_7",
+      "method": "PUT",
+      "url": "{uploadInstructions[6].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 25165824,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 9,
+      "label": "upload_part_8",
+      "method": "PUT",
+      "url": "{uploadInstructions[7].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 29360128,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 10,
+      "label": "upload_part_9",
+      "method": "PUT",
+      "url": "{uploadInstructions[8].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 33554432,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 11,
+      "label": "upload_part_10",
+      "method": "PUT",
+      "url": "{uploadInstructions[9].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4",
+        "offset": 37748736,
+        "length": 374258
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 374258,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 12,
+      "label": "finalize_upload",
+      "method": "POST",
+      "url": "https://api.linkedin.com/rest/videos?action=finalizeUpload",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "LinkedIn-Version": "202506",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "finalizeUploadRequest": {
+          "video": "{videoUrn}",
+          "uploadToken": "",
+          "uploadedPartIds": [
+            "{etag_1}",
+            "{etag_2}",
+            "{etag_3}",
+            "{etag_4}",
+            "{etag_5}",
+            "{etag_6}",
+            "{etag_7}",
+            "{etag_8}",
+            "{etag_9}",
+            "{etag_10}"
+          ]
+        }
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    },
+    {
+      "seq": 13,
+      "label": "create_post",
+      "method": "POST",
+      "url": "https://api.linkedin.com/rest/posts",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "LinkedIn-Version": "202506",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json",
+        "X-RestLi-Method": "CREATE"
+      },
+      "query": {},
+      "body": {
+        "author": "<LINKEDIN_ORG_URN>",
+        "commentary": "Türkiye'de bazı niş pozisyonlarda ücretler, Avrupa'nın 2-3 ülkesi dışında hepsinden yüksek.\n\nUcuz finansman döneminde yapılan ücret artışları güzel bir gelişme, itirazımız yok. Ama finansman maliyeti bu kadar pahalılaşınca aynı artışları sürdürmek artık mümkün değil. Politika faizi borçlanma maliyetine yansıdıkça, işletmelerin cash flow'unu dengelemek için o artış hızını koruyamadığı bir tabloyla karşı karşıyayız.\n\nDiğer yanda kompozisyon problemi var: aynı seniorite, aynı bilgi, aynı pozisyon, aynı şirket profiliyle Türkiye'de Avrupa'nın büyük çoğunluğundan daha yüksek ücret alınan sektörler mevcut.\n\nPeki bu durum nitelikli iş gücü kaybını mı tetikliyor, yoksa siyasi gündemin ürettiği bir algı mı? Konuşmacıya göre bu data'dan okunabilir bir soru: kaç kişi gidiyor, %1 mi %10 mu, ve gidenler geri dönüyor mu?\n\nSiz bordro ve ücret politikalarınızda bu finansman maliyeti baskısını nasıl yönetiyorsunuz?\n\nhttps://www.datassist.com.tr/?utm_source=linkedin&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c05&utm_term=data_number&yvc_v=A&yvc_lang=tr\n\n#ücretlendirme #İK #bordro #ücretpolitikası #insankaynakları",
+        "visibility": "PUBLIC",
+        "distribution": {
+          "feedDistribution": "MAIN_FEED",
+          "targetEntities": [],
+          "thirdPartyDistributionChannels": []
+        },
+        "content": {
+          "media": {
+            "id": "{videoUrn}",
+            "title": ""
+          }
+        },
+        "lifecycleState": "PUBLISHED",
+        "isReshareDisabledByAuthor": false
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    }
+  ],
+  "issues": [
+    {
+      "code": "NO_NATIVE_SCHEDULE",
+      "severity": "warn",
+      "detail": "linkedin has no scheduling API; the local queue will hold this until due"
+    }
+  ],
+  "remote_id": null,
+  "permalink": null,
+  "error": null
+}

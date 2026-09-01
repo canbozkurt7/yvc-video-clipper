@@ -1,0 +1,100 @@
+{
+  "post_id": "c02-tiktok-A",
+  "platform": "tiktok",
+  "status": "dry_run",
+  "mode": "dry_run",
+  "calls": [
+    {
+      "seq": 1,
+      "label": "query_creator_info",
+      "method": "POST",
+      "url": "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": null,
+      "body_kind": "none",
+      "would_send_bytes": 0,
+      "note": "Mandatory first call: returns the privacy levels this app may use."
+    },
+    {
+      "seq": 2,
+      "label": "init_video_publish",
+      "method": "POST",
+      "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "post_info": {
+          "title": "5 kişilik ekip, bordroda küçük şirket mi sayılır? Bin üzerinde şirketle çalışıyoruz: cevap büyüklük değil, kurumsallık. Sen ne dersin, yorumla 👇",
+          "privacy_level": "SELF_ONLY",
+          "disable_comment": false,
+          "video_cover_timestamp_ms": 3500
+        },
+        "source_info": {
+          "source": "FILE_UPLOAD",
+          "video_size": 14925618,
+          "chunk_size": 14925618,
+          "total_chunk_count": 1
+        }
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    },
+    {
+      "seq": 3,
+      "label": "upload_video",
+      "method": "PUT",
+      "url": "{upload_url}",
+      "headers": {
+        "Content-Type": "video/mp4",
+        "Content-Range": "bytes 0-14925617/14925618"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c02\\clip.mp4"
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 14925618,
+      "note": null
+    },
+    {
+      "seq": 4,
+      "label": "fetch_publish_status",
+      "method": "POST",
+      "url": "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "publish_id": "{publish_id}"
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    }
+  ],
+  "issues": [
+    {
+      "code": "NO_NATIVE_SCHEDULE",
+      "severity": "warn",
+      "detail": "tiktok has no scheduling API; the local queue will hold this until due"
+    },
+    {
+      "code": "TIKTOK_UNAUDITED",
+      "severity": "warn",
+      "detail": "Unaudited apps are restricted to SELF_ONLY posting. This is an app-review gate, not a rate limit -- public posting will fail until the app passes audit."
+    }
+  ],
+  "remote_id": null,
+  "permalink": null,
+  "error": null
+}

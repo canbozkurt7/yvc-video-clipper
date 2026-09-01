@@ -1,0 +1,28 @@
+{
+  "seq": 2,
+  "label": "init_video_publish",
+  "method": "POST",
+  "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "post_info": {
+      "title": "Kadın-erkek ücret farkı azalıyor mu? Hayır, büyüyor. Politize olunca da çözülmesi daha zor hale geliyor. Sence İK bunu nasıl çözer? Yorumla 👇",
+      "privacy_level": "SELF_ONLY",
+      "disable_comment": false,
+      "video_cover_timestamp_ms": 3500
+    },
+    "source_info": {
+      "source": "FILE_UPLOAD",
+      "video_size": 18372495,
+      "chunk_size": 18372495,
+      "total_chunk_count": 1
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

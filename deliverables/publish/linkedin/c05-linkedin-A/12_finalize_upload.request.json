@@ -1,0 +1,34 @@
+{
+  "seq": 12,
+  "label": "finalize_upload",
+  "method": "POST",
+  "url": "https://api.linkedin.com/rest/videos?action=finalizeUpload",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "LinkedIn-Version": "202506",
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "finalizeUploadRequest": {
+      "video": "{videoUrn}",
+      "uploadToken": "",
+      "uploadedPartIds": [
+        "{etag_1}",
+        "{etag_2}",
+        "{etag_3}",
+        "{etag_4}",
+        "{etag_5}",
+        "{etag_6}",
+        "{etag_7}",
+        "{etag_8}",
+        "{etag_9}",
+        "{etag_10}"
+      ]
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

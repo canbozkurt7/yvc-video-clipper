@@ -1,0 +1,19 @@
+{
+  "seq": 2,
+  "label": "create_container",
+  "method": "POST",
+  "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "media_type": "REELS",
+    "video_url": "{MEDIA_PUBLIC_BASE_URL}/clip.mp4",
+    "caption": "5 kişilik ekip mi, yüz binlerce çalışanlı dev şirket mi? 🤔\n\nBin üzerinde şirketle çalışıyoruz ve gördük ki büyüklük değil, kurumsallık belirliyor.\nGlobal dev bir şirketin Türkiye ekibi 5 kişi olabiliyor, ya da tam tersi.\nKurumsal olgunluk, çalışan sayısından önce geliyor.\n\n#bordro #insankaynakları #İK #kurumsallaşma #datassist #hrturkiye #ücretyönetimi #sosyalgüvenlik #şirketkültürü #kobi",
+    "share_to_feed": "true"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 14925618,
+  "note": "Asynchronous: returns a creation_id that must be polled."
+}

@@ -1,0 +1,16 @@
+{
+  "seq": 3,
+  "label": "poll_container_status",
+  "method": "GET",
+  "url": "https://graph.facebook.com/v21.0/{creation_id}",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {
+    "fields": "status_code,status"
+  },
+  "body": null,
+  "body_kind": "none",
+  "would_send_bytes": 0,
+  "note": "Poll every 5s until FINISHED, cap at 5 minutes."
+}

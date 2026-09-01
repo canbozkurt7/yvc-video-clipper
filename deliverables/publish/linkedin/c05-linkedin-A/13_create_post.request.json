@@ -1,0 +1,35 @@
+{
+  "seq": 13,
+  "label": "create_post",
+  "method": "POST",
+  "url": "https://api.linkedin.com/rest/posts",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "LinkedIn-Version": "202506",
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json",
+    "X-RestLi-Method": "CREATE"
+  },
+  "query": {},
+  "body": {
+    "author": "<LINKEDIN_ORG_URN>",
+    "commentary": "Türkiye'de bazı niş pozisyonlarda ücretler, Avrupa'nın 2-3 ülkesi dışında hepsinden yüksek.\n\nUcuz finansman döneminde yapılan ücret artışları güzel bir gelişme, itirazımız yok. Ama finansman maliyeti bu kadar pahalılaşınca aynı artışları sürdürmek artık mümkün değil. Politika faizi borçlanma maliyetine yansıdıkça, işletmelerin cash flow'unu dengelemek için o artış hızını koruyamadığı bir tabloyla karşı karşıyayız.\n\nDiğer yanda kompozisyon problemi var: aynı seniorite, aynı bilgi, aynı pozisyon, aynı şirket profiliyle Türkiye'de Avrupa'nın büyük çoğunluğundan daha yüksek ücret alınan sektörler mevcut.\n\nPeki bu durum nitelikli iş gücü kaybını mı tetikliyor, yoksa siyasi gündemin ürettiği bir algı mı? Konuşmacıya göre bu data'dan okunabilir bir soru: kaç kişi gidiyor, %1 mi %10 mu, ve gidenler geri dönüyor mu?\n\nSiz bordro ve ücret politikalarınızda bu finansman maliyeti baskısını nasıl yönetiyorsunuz?\n\nhttps://www.datassist.com.tr/?utm_source=linkedin&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c05&utm_term=data_number&yvc_v=A&yvc_lang=tr\n\n#ücretlendirme #İK #bordro #ücretpolitikası #insankaynakları",
+    "visibility": "PUBLIC",
+    "distribution": {
+      "feedDistribution": "MAIN_FEED",
+      "targetEntities": [],
+      "thirdPartyDistributionChannels": []
+    },
+    "content": {
+      "media": {
+        "id": "{videoUrn}",
+        "title": ""
+      }
+    },
+    "lifecycleState": "PUBLISHED",
+    "isReshareDisabledByAuthor": false
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

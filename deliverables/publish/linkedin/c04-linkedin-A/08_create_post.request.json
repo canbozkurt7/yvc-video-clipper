@@ -1,0 +1,35 @@
+{
+  "seq": 8,
+  "label": "create_post",
+  "method": "POST",
+  "url": "https://api.linkedin.com/rest/posts",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "LinkedIn-Version": "202506",
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json",
+    "X-RestLi-Method": "CREATE"
+  },
+  "query": {},
+  "body": {
+    "author": "<LINKEDIN_ORG_URN>",
+    "commentary": "Gender pay gap kapanmıyor, büyüyor.\n\nTürkiye'de İK gündeminde sık duyduğumuz «kadın-erkek ücret eşitliği iyileşiyor» iyimserliğinin aksine, panelde vurgulanan veri tam tersini söylüyor: «Hocam ne yazık ki gap büyüyor.» Bu, politika üretiminde bir başarısızlık değil, yanlış yerden müdahale ettiğimizin işareti.\n\nSorun şu: eşitsizliği çözülmüş varsayıp yüzeysel adımlar atınca, asıl mesele kemikleşiyor ve yeni, daha büyük tartışmalara dönüşüyor. ABD örneğinde olduğu gibi konu politize olduğunda, basit bir işyeri düzenlemesi olmaktan çıkıp toplumsal bir kavgaya dönüşebiliyor.\n\nBordro ve ücret politikalarını kurarken çıkış noktamız iyi niyet değil, ölçülebilir veri olmalı. Aksi halde attığımız her adım, çözdüğümüzü sandığımız problemi büyütüyor.\n\nSizin kurumunuzda ücret eşitliği kararları hangi veriye dayanıyor?\n\nhttps://www.datassist.com.tr/?utm_source=linkedin&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c04&utm_term=data_number&yvc_v=A&yvc_lang=tr\n\n#ÜcretEşitliği #İK #Bordro #GenderPayGap #VeriYönetimi",
+    "visibility": "PUBLIC",
+    "distribution": {
+      "feedDistribution": "MAIN_FEED",
+      "targetEntities": [],
+      "thirdPartyDistributionChannels": []
+    },
+    "content": {
+      "media": {
+        "id": "{videoUrn}",
+        "title": ""
+      }
+    },
+    "lifecycleState": "PUBLISHED",
+    "isReshareDisabledByAuthor": false
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

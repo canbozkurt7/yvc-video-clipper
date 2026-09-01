@@ -3,7 +3,7 @@
 Bu dosya, oturum bağlamı sıfırlansa bile işin nerede kaldığını anlatır.
 Pahalı çıktıların hepsi diskte; hiçbiri yeniden üretilmek zorunda değil.
 
-**Teslim tarihi: 31 Ağustos 2026.** Plan: klipleri YouTube'a yükleyip
+**Teslim tarihi: 1 Eylül 2026, 23:59.** Plan: klipleri YouTube'a yükleyip
 gerçek veriyle optimize etmek → bkz. [GERCEK-VERI.md](GERCEK-VERI.md).
 
 ## Bugün ne değişti (28 Ağustos)

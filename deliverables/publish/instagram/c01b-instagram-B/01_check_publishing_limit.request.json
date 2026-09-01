@@ -1,0 +1,16 @@
+{
+  "seq": 1,
+  "label": "check_publishing_limit",
+  "method": "GET",
+  "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/content_publishing_limit",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {
+    "fields": "config,quota_usage"
+  },
+  "body": null,
+  "body_kind": "none",
+  "would_send_bytes": 0,
+  "note": "50 published posts per rolling 24h; check headroom before posting."
+}

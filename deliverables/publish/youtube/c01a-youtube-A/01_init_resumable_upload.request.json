@@ -1,0 +1,38 @@
+{
+  "seq": 1,
+  "label": "init_resumable_upload",
+  "method": "POST",
+  "url": "https://www.googleapis.com/upload/youtube/v3/videos",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json; charset=UTF-8",
+    "X-Upload-Content-Length": "18142559",
+    "X-Upload-Content-Type": "video/mp4"
+  },
+  "query": {
+    "uploadType": "resumable",
+    "part": "snippet,status"
+  },
+  "body": {
+    "snippet": {
+      "title": "Gender Pay Gap Kapanmıyor, Büyüyor: Ücret Farkı Neden Kemikleşiyor?",
+      "description": "Gender pay gap kapanmıyor, büyüyor. Panelde konuşulan veriye göre kadın-erkek ücret farkı yıllar içinde daralmak yerine genişliyor.\n\nPolitikalar üretilse de konu siyasallaştığında basit bir işyeri meselesi olmaktan çıkıp toplumsal bir kavgaya dönüşüyor ve sorun kemikleşiyor.\n\nBordro ve ücret verisi için abone ol.\n\nhttps://www.datassist.com.tr/?utm_source=youtube&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c01a&utm_term=data_number&yvc_v=A&yvc_lang=tr",
+      "tags": [
+        "GenderPayGap",
+        "ÜcretEşitliği",
+        "İK",
+        "Bordro"
+      ],
+      "categoryId": "22",
+      "defaultLanguage": "tr"
+    },
+    "status": {
+      "privacyStatus": "private",
+      "selfDeclaredMadeForKids": false,
+      "publishAt": "2026-09-03T15:07:00+00:00"
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": "Response Location header carries the resumable session URI."
+}

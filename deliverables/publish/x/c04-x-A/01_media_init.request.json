@@ -1,0 +1,19 @@
+{
+  "seq": 1,
+  "label": "media_init",
+  "method": "POST",
+  "url": "https://api.x.com/2/media/upload",
+  "headers": {
+    "Authorization": "***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "command": "INIT",
+    "total_bytes": 19228624,
+    "media_type": "video/mp4",
+    "media_category": "tweet_video"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 0,
+  "note": "VERIFY: this account's tier may still use v1.1 media/upload."
+}

@@ -1,0 +1,17 @@
+{
+  "seq": 4,
+  "label": "fetch_publish_status",
+  "method": "POST",
+  "url": "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "publish_id": "{publish_id}"
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

@@ -1,0 +1,28 @@
+{
+  "seq": 2,
+  "label": "init_video_publish",
+  "method": "POST",
+  "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "post_info": {
+      "title": "5 kişilik ekip, bordroda küçük şirket mi sayılır? Bin üzerinde şirketle çalışıyoruz: cevap büyüklük değil, kurumsallık. Sen ne dersin, yorumla 👇",
+      "privacy_level": "SELF_ONLY",
+      "disable_comment": false,
+      "video_cover_timestamp_ms": 3500
+    },
+    "source_info": {
+      "source": "FILE_UPLOAD",
+      "video_size": 14925618,
+      "chunk_size": 14925618,
+      "total_chunk_count": 1
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

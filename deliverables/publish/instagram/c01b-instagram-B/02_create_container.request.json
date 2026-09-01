@@ -1,0 +1,19 @@
+{
+  "seq": 2,
+  "label": "create_container",
+  "method": "POST",
+  "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "media_type": "REELS",
+    "video_url": "{MEDIA_PUBLIC_BASE_URL}/clip.mp4",
+    "caption": "Gender pay gap kapanmıyor, büyüyor 📊\nPolitikalar var ama fark küçülmüyor.\nKonu politize olunca çözüm daha da zorlaşıyor.\nKaydet, İK ekibinle paylaş 👇\n\n#ücretEşitliği #genderpaygap #İK #bordro #insankaynakları #ücretpolitikası #kobi #işyeriEşitliği #veriOdaklıİK #türkiyeİK",
+    "share_to_feed": "true"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 18372495,
+  "note": "Asynchronous: returns a creation_id that must be polled."
+}

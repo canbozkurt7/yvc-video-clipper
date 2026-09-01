@@ -1,0 +1,17 @@
+{
+  "seq": 6,
+  "label": "media_finalize",
+  "method": "POST",
+  "url": "https://api.x.com/2/media/upload",
+  "headers": {
+    "Authorization": "***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "command": "FINALIZE",
+    "media_id": "{media_id}"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 0,
+  "note": "Then poll STATUS until processing_info.state == succeeded."
+}

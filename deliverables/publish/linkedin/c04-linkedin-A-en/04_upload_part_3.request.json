@@ -1,0 +1,18 @@
+{
+  "seq": 4,
+  "label": "upload_part_3",
+  "method": "PUT",
+  "url": "{uploadInstructions[2].uploadUrl}",
+  "headers": {
+    "Content-Type": "application/octet-stream"
+  },
+  "query": {},
+  "body": {
+    "$binary_ref": "work\\r39OrneyMDs\\clips\\c04\\clip.mp4",
+    "offset": 8388608,
+    "length": 4194304
+  },
+  "body_kind": "binary",
+  "would_send_bytes": 4194304,
+  "note": "Collect the ETag from each part; finalize needs them in order."
+}

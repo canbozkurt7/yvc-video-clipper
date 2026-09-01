@@ -1,0 +1,22 @@
+{
+  "seq": 7,
+  "label": "create_tweet",
+  "method": "POST",
+  "url": "https://api.x.com/2/tweets",
+  "headers": {
+    "Authorization": "***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "text": "Gender pay gap kapanmıyor, büyüyor. Panelde net: «ne yazık ki gap büyüyor.» Sorunu çözülmüş sayıp yüzeysel adım atınca kemikleşiyor, kavgaya dönüşüyor. #ÜcretEşitliği #GenderPayGap\nhttps://www.datassist.com.tr/?utm_source=x&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c04&utm_term=data_number&yvc_v=A&yvc_lang=tr",
+    "media": {
+      "media_ids": [
+        "{media_id}"
+      ]
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

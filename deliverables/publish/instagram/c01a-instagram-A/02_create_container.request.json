@@ -1,0 +1,19 @@
+{
+  "seq": 2,
+  "label": "create_container",
+  "method": "POST",
+  "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "media_type": "REELS",
+    "video_url": "{MEDIA_PUBLIC_BASE_URL}/clip.mp4",
+    "caption": "Gender pay gap kapanmıyor, büyüyor 📊\n\nPanelde konuşulanlar net: kadın-erkek ücret farkı yıllar içinde daralmıyor, genişliyor. Politikalar üretiliyor ama konu siyasallaşınca basit bir işyeri meselesi olmaktan çıkıp koca bir toplumsal kavgaya dönüşüyor — tıpkı kürtaj ya da STEM araştırmaları gibi.\n\nİK ve bordro tarafında bu veriyi takip ediyor musunuz?\n\n#ÜcretEşitliği #GenderPayGap #İK #Bordro #ÜcretPolitikası #KadınErkekEşitliği #İnsanKaynakları #Datassist #ÜcretYönetimi #ToplumsalCinsiyet",
+    "share_to_feed": "true"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 18142559,
+  "note": "Asynchronous: returns a creation_id that must be polled."
+}

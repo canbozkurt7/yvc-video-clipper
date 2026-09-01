@@ -1,0 +1,196 @@
+{
+  "post_id": "c04-linkedin-A",
+  "platform": "linkedin",
+  "status": "dry_run",
+  "mode": "dry_run",
+  "calls": [
+    {
+      "seq": 1,
+      "label": "initialize_upload",
+      "method": "POST",
+      "url": "https://api.linkedin.com/rest/videos?action=initializeUpload",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "LinkedIn-Version": "202506",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "initializeUploadRequest": {
+          "owner": "<LINKEDIN_ORG_URN>",
+          "fileSizeBytes": 19228624,
+          "uploadCaptions": false,
+          "uploadThumbnail": false
+        }
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": "Returns a video URN plus per-part upload instructions."
+    },
+    {
+      "seq": 2,
+      "label": "upload_part_1",
+      "method": "PUT",
+      "url": "{uploadInstructions[0].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c04\\clip.mp4",
+        "offset": 0,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 3,
+      "label": "upload_part_2",
+      "method": "PUT",
+      "url": "{uploadInstructions[1].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c04\\clip.mp4",
+        "offset": 4194304,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 4,
+      "label": "upload_part_3",
+      "method": "PUT",
+      "url": "{uploadInstructions[2].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c04\\clip.mp4",
+        "offset": 8388608,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 5,
+      "label": "upload_part_4",
+      "method": "PUT",
+      "url": "{uploadInstructions[3].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c04\\clip.mp4",
+        "offset": 12582912,
+        "length": 4194304
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 4194304,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 6,
+      "label": "upload_part_5",
+      "method": "PUT",
+      "url": "{uploadInstructions[4].uploadUrl}",
+      "headers": {
+        "Content-Type": "application/octet-stream"
+      },
+      "query": {},
+      "body": {
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c04\\clip.mp4",
+        "offset": 16777216,
+        "length": 2451408
+      },
+      "body_kind": "binary",
+      "would_send_bytes": 2451408,
+      "note": "Collect the ETag from each part; finalize needs them in order."
+    },
+    {
+      "seq": 7,
+      "label": "finalize_upload",
+      "method": "POST",
+      "url": "https://api.linkedin.com/rest/videos?action=finalizeUpload",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "LinkedIn-Version": "202506",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "finalizeUploadRequest": {
+          "video": "{videoUrn}",
+          "uploadToken": "",
+          "uploadedPartIds": [
+            "{etag_1}",
+            "{etag_2}",
+            "{etag_3}",
+            "{etag_4}",
+            "{etag_5}"
+          ]
+        }
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    },
+    {
+      "seq": 8,
+      "label": "create_post",
+      "method": "POST",
+      "url": "https://api.linkedin.com/rest/posts",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***",
+        "LinkedIn-Version": "202506",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json",
+        "X-RestLi-Method": "CREATE"
+      },
+      "query": {},
+      "body": {
+        "author": "<LINKEDIN_ORG_URN>",
+        "commentary": "Gender pay gap kapanmıyor, büyüyor.\n\nTürkiye'de İK gündeminde sık duyduğumuz «kadın-erkek ücret eşitliği iyileşiyor» iyimserliğinin aksine, panelde vurgulanan veri tam tersini söylüyor: «Hocam ne yazık ki gap büyüyor.» Bu, politika üretiminde bir başarısızlık değil, yanlış yerden müdahale ettiğimizin işareti.\n\nSorun şu: eşitsizliği çözülmüş varsayıp yüzeysel adımlar atınca, asıl mesele kemikleşiyor ve yeni, daha büyük tartışmalara dönüşüyor. ABD örneğinde olduğu gibi konu politize olduğunda, basit bir işyeri düzenlemesi olmaktan çıkıp toplumsal bir kavgaya dönüşebiliyor.\n\nBordro ve ücret politikalarını kurarken çıkış noktamız iyi niyet değil, ölçülebilir veri olmalı. Aksi halde attığımız her adım, çözdüğümüzü sandığımız problemi büyütüyor.\n\nSizin kurumunuzda ücret eşitliği kararları hangi veriye dayanıyor?\n\nhttps://www.datassist.com.tr/?utm_source=linkedin&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c04&utm_term=data_number&yvc_v=A&yvc_lang=tr\n\n#ÜcretEşitliği #İK #Bordro #GenderPayGap #VeriYönetimi",
+        "visibility": "PUBLIC",
+        "distribution": {
+          "feedDistribution": "MAIN_FEED",
+          "targetEntities": [],
+          "thirdPartyDistributionChannels": []
+        },
+        "content": {
+          "media": {
+            "id": "{videoUrn}",
+            "title": ""
+          }
+        },
+        "lifecycleState": "PUBLISHED",
+        "isReshareDisabledByAuthor": false
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    }
+  ],
+  "issues": [
+    {
+      "code": "NO_NATIVE_SCHEDULE",
+      "severity": "warn",
+      "detail": "linkedin has no scheduling API; the local queue will hold this until due"
+    }
+  ],
+  "remote_id": null,
+  "permalink": null,
+  "error": null
+}

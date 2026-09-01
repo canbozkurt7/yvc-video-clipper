@@ -1,0 +1,35 @@
+{
+  "seq": 13,
+  "label": "create_post",
+  "method": "POST",
+  "url": "https://api.linkedin.com/rest/posts",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "LinkedIn-Version": "202506",
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json",
+    "X-RestLi-Method": "CREATE"
+  },
+  "query": {},
+  "body": {
+    "author": "<LINKEDIN_ORG_URN>",
+    "commentary": "In some niche roles, Turkey pays higher salaries than every European country except 2-3.\n\nWage increases made during the cheap-financing era were a good thing — no argument there. But once financing costs spike, sustaining those raises gets a lot harder. As policy rates flow through to borrowing costs, businesses can no longer keep pace with wage growth while balancing cash flow.\n\nThere's also a composition problem: same seniority, same expertise, same role, same company profile — and pay in Turkey still outpaces most of Europe.\n\nDoes this signal a loss of skilled talent, or is it just a politically charged narrative? According to the data, this is measurable: how many people are leaving, is it 1% or 10%, and are they coming back?\n\nHow is your organization managing wage policy under today's financing cost pressure?\n\nhttps://www.datassist.com.tr/?utm_source=linkedin&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c05&utm_term=data_number&yvc_v=A&yvc_lang=en\n\n#ücretlendirme #İK #bordro #ücretpolitikası #insankaynakları",
+    "visibility": "PUBLIC",
+    "distribution": {
+      "feedDistribution": "MAIN_FEED",
+      "targetEntities": [],
+      "thirdPartyDistributionChannels": []
+    },
+    "content": {
+      "media": {
+        "id": "{videoUrn}",
+        "title": ""
+      }
+    },
+    "lifecycleState": "PUBLISHED",
+    "isReshareDisabledByAuthor": false
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

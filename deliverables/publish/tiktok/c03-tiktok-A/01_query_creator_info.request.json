@@ -1,0 +1,15 @@
+{
+  "seq": 1,
+  "label": "query_creator_info",
+  "method": "POST",
+  "url": "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": null,
+  "body_kind": "none",
+  "would_send_bytes": 0,
+  "note": "Mandatory first call: returns the privacy levels this app may use."
+}

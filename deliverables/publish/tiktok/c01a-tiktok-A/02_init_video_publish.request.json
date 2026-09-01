@@ -1,0 +1,28 @@
+{
+  "seq": 2,
+  "label": "init_video_publish",
+  "method": "POST",
+  "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json"
+  },
+  "query": {},
+  "body": {
+    "post_info": {
+      "title": "Ücret farkı kapanıyor sanıyordun? Yanılıyorsun, büyüyor. Politikalar üretiliyor ama işe yaramıyor, konu siyasallaşınca kocaman bir kavgaya dönüşüyor. ",
+      "privacy_level": "SELF_ONLY",
+      "disable_comment": false,
+      "video_cover_timestamp_ms": 3500
+    },
+    "source_info": {
+      "source": "FILE_UPLOAD",
+      "video_size": 18142559,
+      "chunk_size": 18142559,
+      "total_chunk_count": 1
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": null
+}

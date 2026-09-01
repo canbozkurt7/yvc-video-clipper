@@ -16,6 +16,7 @@ credentials exist.
 
 | Doc | What it covers |
 |---|---|
+| [deliverables/](deliverables/) | Produced clips, publish proof, and performance report from one committed run |
 | [docs/MIMARI.md](docs/MIMARI.md) | Architecture diagram and per-stage tooling |
 | [docs/STRATEJI-NOTU.md](docs/STRATEJI-NOTU.md) | Strategy note: criteria, costs, limits |
 | [docs/GERCEK-VERI.md](docs/GERCEK-VERI.md) | Collecting **real** YouTube metrics |

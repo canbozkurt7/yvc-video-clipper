@@ -1,0 +1,141 @@
+{
+  "verdict": {
+    "winner": "question",
+    "loser": "data_number",
+    "ranking": [
+      {
+        "hook_type": "question",
+        "n": 3,
+        "hqs_mean": 0.4383,
+        "hqs_shrunk": 0.1644
+      },
+      {
+        "hook_type": "data_number",
+        "n": 15,
+        "hqs_mean": -0.0877,
+        "hqs_shrunk": -0.0657
+      }
+    ],
+    "drivers": [
+      {
+        "metric": "hook_retention_3s",
+        "winner_z": 0.862,
+        "loser_z": -0.172,
+        "contribution": 0.4656,
+        "share": 0.5314
+      },
+      {
+        "metric": "completion_rate",
+        "winner_z": 1.369,
+        "loser_z": -0.274,
+        "contribution": 0.4107,
+        "share": 0.4686
+      },
+      {
+        "metric": "ctr",
+        "winner_z": -0.636,
+        "loser_z": 0.127,
+        "contribution": -0.0763,
+        "share": 0.0
+      },
+      {
+        "metric": "engagement_rate",
+        "winner_z": -1.142,
+        "loser_z": 0.228,
+        "contribution": -0.2741,
+        "share": 0.0
+      }
+    ],
+    "sentence_tr": "question öne çıktı. Farkı açıklayan başlıca etkenler — 3 saniye tutunma: %53, tamamlanma oranı: %47. En zayıf tip: data_number.",
+    "confidence": "simulated",
+    "caveats": [
+      "Katkıda bulunan değerlerin %100'ı SİMÜLE. Bu sonuç yön gösterir, karar vermez.",
+      "Örneklem küçük: kazanan n=3, kaybeden n=15.",
+      "Gönderiler farklı saatlerde ve farklı konularda yayınlandı; hook tipi tek değişken değil.",
+      "Yalnızca yayınlanmayı seçtiğimiz hook tiplerini gözlemliyoruz (seçim yanlılığı)."
+    ],
+    "simulated_share": 1.0
+  },
+  "ab_test_verdicts": [
+    {
+      "ab_group": "c01",
+      "render_variant_a": "plain",
+      "render_variant_b": "blur_reveal",
+      "n_a": 3,
+      "n_b": 3,
+      "mean_lift": 0.0014,
+      "platform_lifts": [
+        {
+          "platform": "instagram",
+          "composite_lift": -0.0014,
+          "per_metric": {
+            "hook_retention_3s": 0.059,
+            "completion_rate": 0.0818,
+            "engagement_rate": -0.019,
+            "ctr": -0.4465
+          }
+        },
+        {
+          "platform": "tiktok",
+          "composite_lift": 0.0269,
+          "per_metric": {
+            "hook_retention_3s": 0.024,
+            "completion_rate": 0.0494,
+            "engagement_rate": 0.1225,
+            "ctr": -0.2078
+          }
+        },
+        {
+          "platform": "youtube",
+          "composite_lift": -0.0214,
+          "per_metric": {
+            "hook_retention_3s": 0.0488,
+            "completion_rate": 0.0216,
+            "engagement_rate": -0.1346,
+            "ctr": -0.2182
+          }
+        }
+      ],
+      "platforms_agreeing": 1,
+      "material": false,
+      "winner": null,
+      "drivers": [
+        {
+          "metric": "hook_retention_3s",
+          "mean_lift": 0.0439,
+          "contribution": 0.0198,
+          "share": 0.6092
+        },
+        {
+          "metric": "completion_rate",
+          "mean_lift": 0.0509,
+          "contribution": 0.0127,
+          "share": 0.3908
+        },
+        {
+          "metric": "engagement_rate",
+          "mean_lift": -0.0104,
+          "contribution": -0.0021,
+          "share": 0.0
+        },
+        {
+          "metric": "ctr",
+          "mean_lift": -0.2908,
+          "contribution": -0.0291,
+          "share": 0.0
+        }
+      ],
+      "sentence_tr": "c01: 'plain' (A) ile 'blur_reveal' (B) arasındaki bileşik fark %0.1; %5 materyallik eşiğinin altında kaldığı için kazanan ilan edilmiyor.",
+      "confidence": "simulated",
+      "caveats": [
+        "Katkıda bulunan değerlerin %100'ı SİMÜLE. Bu sonuç yön gösterir, karar vermez.",
+        "Ölçüm birimi çift: A n=3, B n=3 gönderi, eşleşen 3 platformda birer çift.",
+        "Aynı klip içeriği, aynı hook, aynı platform seti -- değişen tek şey açılış efekti. Bu yüzden hook tipi karşılaştırmasından daha az yanlı.",
+        "Kazanan ilanı iki koşulu birlikte arıyor: bileşik farkın %5 üstünde olması ve tüm platformlarda aynı yönü göstermesi. 3 platformla işaret testinin ulaşabileceği en iyi anlamlılık p=0.25'tir; bu bir yön göstergesidir, istatistiksel kanıt değil."
+      ],
+      "simulated_share": 1.0
+    }
+  ],
+  "window_analyzed": "T+24h",
+  "row_count": 72
+}

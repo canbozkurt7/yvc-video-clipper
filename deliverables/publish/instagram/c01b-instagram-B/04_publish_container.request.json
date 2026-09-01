@@ -1,0 +1,16 @@
+{
+  "seq": 4,
+  "label": "publish_container",
+  "method": "POST",
+  "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media_publish",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "creation_id": "{creation_id}"
+  },
+  "body_kind": "form",
+  "would_send_bytes": 0,
+  "note": null
+}

@@ -1,0 +1,38 @@
+{
+  "seq": 1,
+  "label": "init_resumable_upload",
+  "method": "POST",
+  "url": "https://www.googleapis.com/upload/youtube/v3/videos",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json; charset=UTF-8",
+    "X-Upload-Content-Length": "15034280",
+    "X-Upload-Content-Type": "video/mp4"
+  },
+  "query": {
+    "uploadType": "resumable",
+    "part": "snippet,status"
+  },
+  "body": {
+    "snippet": {
+      "title": "Asgari Ücret Gerçekten Düşük mü? 18 Milyon Çalışanın Verisi",
+      "description": "Asgari ücret Türkiye'de gerçekten düşük mü? Panelde konuşulan veriye göre asgari ücretin toplam ücretler içindeki payı 2011-2014'ten bu yana %60'ların üzerine çıktı; 30 milyon ücretlinin 18 milyonu bu bantta. Ama Iğdır, Burdur, İstanbul ve Ankara arasında tablo aynı değil — şehir bilgisi olmadan yorum yapmak eksik kalıyor. Bordro ve ücret politikası kararları için bölgesel veriye bakın. Datassist'e abone olun, veri odaklı İK içerikleri için takipte kalın.\n\nhttps://www.datassist.com.tr/?utm_source=youtube&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c03&utm_term=data_number&yvc_v=A&yvc_lang=tr",
+      "tags": [
+        "AsgariÜcret",
+        "Bordro",
+        "İK",
+        "Datassist"
+      ],
+      "categoryId": "22",
+      "defaultLanguage": "tr"
+    },
+    "status": {
+      "privacyStatus": "private",
+      "selfDeclaredMadeForKids": false,
+      "publishAt": "2026-09-05T14:57:00+00:00"
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": "Response Location header carries the resumable session URI."
+}

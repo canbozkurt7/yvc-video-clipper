@@ -1,0 +1,19 @@
+{
+  "seq": 4,
+  "label": "media_append_2",
+  "method": "POST",
+  "url": "https://api.x.com/2/media/upload",
+  "headers": {
+    "Authorization": "***REDACTED***"
+  },
+  "query": {},
+  "body": {
+    "command": "APPEND",
+    "media_id": "{media_id}",
+    "segment_index": 2,
+    "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+  },
+  "body_kind": "multipart",
+  "would_send_bytes": 5242880,
+  "note": null
+}

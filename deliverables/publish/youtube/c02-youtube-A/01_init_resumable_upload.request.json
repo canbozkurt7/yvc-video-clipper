@@ -1,0 +1,38 @@
+{
+  "seq": 1,
+  "label": "init_resumable_upload",
+  "method": "POST",
+  "url": "https://www.googleapis.com/upload/youtube/v3/videos",
+  "headers": {
+    "Authorization": "Bearer ***REDACTED***",
+    "Content-Type": "application/json; charset=UTF-8",
+    "X-Upload-Content-Length": "14925618",
+    "X-Upload-Content-Type": "video/mp4"
+  },
+  "query": {
+    "uploadType": "resumable",
+    "part": "snippet,status"
+  },
+  "body": {
+    "snippet": {
+      "title": "Bordroda Şirket Büyüklüğü Ne Zaman Önemsiz Kalır?",
+      "description": "Datassist, bin üzerinde şirkete bordro, ücret ve sosyal güvenlik danışmanlığı veriyor. Global dev şirketlerin Türkiye ekibi 5 kişi olabiliyor, Türkiye'de büyüyüp global'e açılan oyun ve teknoloji şirketleri de var. Bordroda belirleyici olan çalışan sayısı değil, kurumsal olgunluk. Abone ol, Datassist'i takip et.\n\nhttps://www.datassist.com.tr/?utm_source=youtube&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c02&utm_term=question&yvc_v=A&yvc_lang=tr",
+      "tags": [
+        "bordro",
+        "İK",
+        "datassist",
+        "kurumsallaşma"
+      ],
+      "categoryId": "22",
+      "defaultLanguage": "tr"
+    },
+    "status": {
+      "privacyStatus": "private",
+      "selfDeclaredMadeForKids": false,
+      "publishAt": "2026-09-02T15:05:00+00:00"
+    }
+  },
+  "body_kind": "json",
+  "would_send_bytes": 0,
+  "note": "Response Location header carries the resumable session URI."
+}

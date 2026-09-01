@@ -1,0 +1,85 @@
+{
+  "post_id": "c03-instagram-A",
+  "platform": "instagram",
+  "status": "dry_run",
+  "mode": "dry_run",
+  "calls": [
+    {
+      "seq": 1,
+      "label": "check_publishing_limit",
+      "method": "GET",
+      "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/content_publishing_limit",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***"
+      },
+      "query": {
+        "fields": "config,quota_usage"
+      },
+      "body": null,
+      "body_kind": "none",
+      "would_send_bytes": 0,
+      "note": "50 published posts per rolling 24h; check headroom before posting."
+    },
+    {
+      "seq": 2,
+      "label": "create_container",
+      "method": "POST",
+      "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "media_type": "REELS",
+        "video_url": "{MEDIA_PUBLIC_BASE_URL}/clip.mp4",
+        "caption": "Türkiye'de 30 milyon ücretlinin 18 milyonu asgari ücret civarında 📊\nAsgari ücretin toplam ücretler içindeki payı 2011-14'ten bugüne %60'ların üzerine çıktı.\nAma Iğdır'la İstanbul aynı değil — şehir bilgisi olmadan yorum eksik kalıyor.\n\n#AsgariÜcret #Bordro #İK #ÜcretPolitikası #İnsanKaynakları #Datassist #ÜcretYönetimi #KOBİ #Maaş #TürkiyeEkonomisi",
+        "share_to_feed": "true"
+      },
+      "body_kind": "form",
+      "would_send_bytes": 15034280,
+      "note": "Asynchronous: returns a creation_id that must be polled."
+    },
+    {
+      "seq": 3,
+      "label": "poll_container_status",
+      "method": "GET",
+      "url": "https://graph.facebook.com/v21.0/{creation_id}",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***"
+      },
+      "query": {
+        "fields": "status_code,status"
+      },
+      "body": null,
+      "body_kind": "none",
+      "would_send_bytes": 0,
+      "note": "Poll every 5s until FINISHED, cap at 5 minutes."
+    },
+    {
+      "seq": 4,
+      "label": "publish_container",
+      "method": "POST",
+      "url": "https://graph.facebook.com/v21.0/<IG_USER_ID>/media_publish",
+      "headers": {
+        "Authorization": "Bearer ***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "creation_id": "{creation_id}"
+      },
+      "body_kind": "form",
+      "would_send_bytes": 0,
+      "note": null
+    }
+  ],
+  "issues": [
+    {
+      "code": "NO_NATIVE_SCHEDULE",
+      "severity": "warn",
+      "detail": "instagram has no scheduling API; the local queue will hold this until due"
+    }
+  ],
+  "remote_id": null,
+  "permalink": null,
+  "error": null
+}

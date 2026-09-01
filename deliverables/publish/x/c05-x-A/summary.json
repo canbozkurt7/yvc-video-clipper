@@ -1,0 +1,228 @@
+{
+  "post_id": "c05-x-A",
+  "platform": "x",
+  "status": "dry_run",
+  "mode": "dry_run",
+  "calls": [
+    {
+      "seq": 1,
+      "label": "media_init",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "INIT",
+        "total_bytes": 38122994,
+        "media_type": "video/mp4",
+        "media_category": "tweet_video"
+      },
+      "body_kind": "form",
+      "would_send_bytes": 0,
+      "note": "VERIFY: this account's tier may still use v1.1 media/upload."
+    },
+    {
+      "seq": 2,
+      "label": "media_append_0",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 0,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 3,
+      "label": "media_append_1",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 1,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 4,
+      "label": "media_append_2",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 2,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 5,
+      "label": "media_append_3",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 3,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 6,
+      "label": "media_append_4",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 4,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 7,
+      "label": "media_append_5",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 5,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 8,
+      "label": "media_append_6",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 6,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 5242880,
+      "note": null
+    },
+    {
+      "seq": 9,
+      "label": "media_append_7",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "APPEND",
+        "media_id": "{media_id}",
+        "segment_index": 7,
+        "$binary_ref": "work\\r39OrneyMDs\\clips\\c05\\clip.mp4"
+      },
+      "body_kind": "multipart",
+      "would_send_bytes": 1422834,
+      "note": null
+    },
+    {
+      "seq": 10,
+      "label": "media_finalize",
+      "method": "POST",
+      "url": "https://api.x.com/2/media/upload",
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "query": {},
+      "body": {
+        "command": "FINALIZE",
+        "media_id": "{media_id}"
+      },
+      "body_kind": "form",
+      "would_send_bytes": 0,
+      "note": "Then poll STATUS until processing_info.state == succeeded."
+    },
+    {
+      "seq": 11,
+      "label": "create_tweet",
+      "method": "POST",
+      "url": "https://api.x.com/2/tweets",
+      "headers": {
+        "Authorization": "***REDACTED***",
+        "Content-Type": "application/json"
+      },
+      "query": {},
+      "body": {
+        "text": "Türkiye'de bazı niş sektörlerde ücretler, Avrupa'nın 2-3 ülkesi dışında hepsinden yüksek. Ucuz finansman dönemi bitti, o artışları artık sürdüremiyoruz. Nitelikli işgücü kaybı mı, yoksa gündem mi?\nhttps://www.datassist.com.tr/?utm_source=x&utm_medium=social_organic&utm_campaign=datassist_clips&utm_content=c05&utm_term=data_number&yvc_v=A&yvc_lang=tr",
+        "media": {
+          "media_ids": [
+            "{media_id}"
+          ]
+        }
+      },
+      "body_kind": "json",
+      "would_send_bytes": 0,
+      "note": null
+    }
+  ],
+  "issues": [
+    {
+      "code": "NO_NATIVE_SCHEDULE",
+      "severity": "warn",
+      "detail": "x has no scheduling API; the local queue will hold this until due"
+    }
+  ],
+  "remote_id": null,
+  "permalink": null,
+  "error": null
+}

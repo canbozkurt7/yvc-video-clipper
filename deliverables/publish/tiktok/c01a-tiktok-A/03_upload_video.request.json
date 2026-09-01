@@ -1,0 +1,17 @@
+{
+  "seq": 3,
+  "label": "upload_video",
+  "method": "PUT",
+  "url": "{upload_url}",
+  "headers": {
+    "Content-Type": "video/mp4",
+    "Content-Range": "bytes 0-18142558/18142559"
+  },
+  "query": {},
+  "body": {
+    "$binary_ref": "work\\r39OrneyMDs\\clips\\c01a\\clip.mp4"
+  },
+  "body_kind": "binary",
+  "would_send_bytes": 18142559,
+  "note": null
+}
