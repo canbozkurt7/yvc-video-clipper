@@ -17,24 +17,27 @@ YouTube burada "bir platform daha" değil, **kalibrasyon çapası**.
 Klipler burada:
 
 ```
-work/r39OrneyMDs/clips/c01..c05/clip.mp4   (+ cover.jpg)
+work/r39OrneyMDs/clips/c01a,c01b,c02..c05/clip.mp4   (+ cover.jpg)
 ```
+
+(Aynı dosyalar teslim için `deliverables/clips/` altında da commit'li.)
 
 | Klip | Format | Süre | Hook tipi | Öneri |
 |---|---|---|---|---|
-| c01 | 9:16 | 48.1 sn | data_number | Shorts |
-| c02 | 9:16 | 58.5 sn | contrarian | Shorts |
-| c03 | 9:16 | 60.0 sn | contrarian | Shorts |
-| c04 | 16:9 | 90.0 sn | contrarian | normal video |
-| c05 | 16:9 | 115.2 sn | contrarian | normal video |
+| c01a | 9:16 | 57.3 sn | data_number | Shorts — A/B varyant A (`plain`) |
+| c01b | 9:16 | 57.3 sn | data_number | Shorts — A/B varyant B (`blur_reveal`) |
+| c02 | 9:16 | 46.0 sn | question | Shorts |
+| c03 | 9:16 | 53.1 sn | data_number | Shorts |
+| c04 | 16:9 | 60.6 sn | data_number | normal video |
+| c05 | 16:9 | 118.4 sn | data_number | normal video |
 
 Başlık ve açıklama metinleri `posts.json` içinde platform bazında hazır —
 elle yazmaya gerek yok.
 
-> **Not:** 60 saniyeyi aşan dikey klip Shorts sayılmaz. c03 tam 59.97 sn,
-> yani sınırda. Yükleme sonrası Shorts olarak göründüğünü doğrula; olmadıysa
-> `config/config.yaml` içinde `select.vertical.max_s` değerini 57'ye çekip
-> `--from select` ile yeniden üret.
+> **Not:** 60 saniyeyi aşan dikey klip Shorts sayılmaz. Bu koşuda tüm
+> dikey klipler (c01a/c01b/c02/c03) 60 sn altında, sınırda olan yok.
+> `select.vertical.max_s` sınırı gelecekte aşılırsa `config/config.yaml`
+> içinde düşürüp `--from select` ile yeniden üretin.
 
 ## 2. remote_ids.json yaz
 

@@ -61,50 +61,67 @@ arıyor; `*.egg-info/` gitignore'a girdi.
 
 ## Tamamlanan ve diskte duran çıktılar
 
+> **Bu tablo 1 Eylül'deki teslim koşusuna göre güncellendi.** `segment` ve
+> `score` `claude -p`'ye bağlı olduğu için (deterministik değil), aynı
+> videoyu yeniden koşturmak farklı segment sınırları ve farklı klip
+> seçimleri üretebiliyor — `transcribe` (Whisper, LLM'siz) hariç. Aşağıdaki
+> sayılar `deliverables/`'a giden koşuya ait.
+
 | Dosya | Ne | Yeniden üretme maliyeti |
 |---|---|---|
 | `work/r39OrneyMDs/source.mp4` | **1920x1080@50fps**, 3603 s, 765 MB | ~15 dk indirme |
-| `work/r39OrneyMDs/transcript.json` | 1508 parça, 10.595 kelime | **13 dk Whisper** (`small`) |
-| `work/r39OrneyMDs/quality_report.json` | diakritik 82.1/1000, sentinel `ücret` 0.93, kalanı 1.0 | saniyeler |
-| `work/r39OrneyMDs/segments.json` | 30 anlamsal segment, 0 başarısız pencere | ~4 dk LLM |
-| `work/r39OrneyMDs/scores.json` | 30 segment tam rubrikle puanlandı, 0 degrade | ~3 dk LLM |
-| `work/r39OrneyMDs/clips.json` | 3 dikey + 2 yatay, artı `dropped` kaydı | saniyeler |
-| `work/r39OrneyMDs/clips/c01..c05/` | **klipler + kapak görselleri** | ~2.6 dk render |
-| `work/r39OrneyMDs/posts.json` | 13 gönderi, 5/5 klip **0 hata 0 uyarı** | ~5 dk LLM |
+| `work/r39OrneyMDs/transcript.json` | 1508 parça, 10.595 kelime | **~14 dk Whisper** (`small`) |
+| `work/r39OrneyMDs/quality_report.json` | diakritik 82.1/1000, sentinel `ücret` ASCII-folded | saniyeler |
+| `work/r39OrneyMDs/segments.json` | 34 anlamsal segment | ~1 dk LLM |
+| `work/r39OrneyMDs/scores.json` | 34 segment tam rubrikle puanlandı | ~2 dk LLM |
+| `work/r39OrneyMDs/clips.json` | 4 dikey + 2 yatay (A/B çifti dahil), artı `dropped` kaydı | saniyeler |
+| `work/r39OrneyMDs/clips/c01a,c01b,c02..c05/` | **klipler + kapak görselleri** | ~3.3 dk render |
+| `work/r39OrneyMDs/posts.json` | 18 gönderi, 6/6 klip **0 hata 0 uyarı** | ~2.5 dk LLM |
 | `work/r39OrneyMDs/publish/` | dry-run payload'ları + `PUBLISH_PROOF.md` | saniyeler |
 | `work/r39OrneyMDs/report/report.html` | skor kartı ve hook analizi | saniyeler |
-| `.yvc/yvc.db` | hook veritabanı: 5 klip, 60 skor, 13 gönderi, 52 metrik | — |
+| `.yvc/yvc.db` | hook veritabanı: 6 klip, 72 skor, 18 gönderi, 72 metrik, 2 prior | — |
 
-`source.rejected-360p.mp4` de duruyor: dün ne olduğunun kanıtı, silinebilir.
+Bu koşunun kopyası, teslim için `deliverables/` altında commit'lendi
+(bkz. [deliverables/README.md](../deliverables/README.md)) — `work/`
+gitignore'lu kaldığı için asıl teslim edilecek dosyalar orada.
 
 ## Üretilen klipler
 
 | Klip | Format | Süre | Pencere skoru | Hook tipi | Kaynak segment (segment skoru) |
 |---|---|---|---|---|---|
-| c01 | 1080x1920 | 36.0 sn | 62.5 | contrarian | seg_016 (62.0) |
-| c02 | 1080x1920 | 53.1 sn | 33.8 | data_number | seg_015 (58.8) |
-| c03 | 1080x1920 | 57.9 sn | 31.5 | contrarian | seg_029 (59.5) |
-| c04 | 1920x1080 | 116.1 sn | 48.5 | data_number | seg_015 (58.8) |
-| c05 | 1920x1080 | 117.8 sn | 43.7 | contrarian | seg_029 (59.5) |
+| c01a | 9:16 | 57.3 sn | 49.5 | data_number | seg_006 (63.3) — A/B varyant **A** (`plain`) |
+| c01b | 9:16 | 57.3 sn | 49.5 | data_number | seg_006 (63.3) — A/B varyant **B** (`blur_reveal`) |
+| c02 | 9:16 | 46.0 sn | 35.1 | question | seg_002 (50.8) |
+| c03 | 9:16 | 53.1 sn | 35.0 | data_number | seg_017 (50.4) |
+| c04 | 16:9 | 60.6 sn | 50.8 | data_number | seg_006 (63.3) |
+| c05 | 16:9 | 118.4 sn | 42.1 | data_number | seg_018 (54.0) |
 
-5/5 başarılı, hepsi QC'den `ok`, dikeylerin üçünde de `dynamic` kadraj.
+6/6 başarılı, hepsi QC'den `ok`, dört dikeyin **dördünde de** `dynamic`
+kadraj.
 
-## Bilinen kalite sorunu: pencere skorları segment skorlarının çok altında
+## Bilinen kalite deseni: pencere skorları segment skorlarının altında
 
-c02 ve c03'ün pencere skoru 33.8 ve 31.5 — eşik ise 55. Sebep bir hata
-değil, formülün kendisi: pencere skoru
+c02 ve c03'ün pencere skoru 35.1 ve 35.0 — eşik 55, kotayı doldurmak
+için 50'ye gevşetildi (`[select] WARNING threshold relaxed to meet
+quota`). Sebep bir hata değil, formülün kendisi: pencere skoru
 `segment_total × sqrt(pencerenin segmentte kapladığı oran)` ile
 cezalandırılıyor, yani uzun bir segmentten kesilen kısa pencere
-kaçınılmaz olarak düşük puan alıyor. Eşiği geçen 7 segmentin 5'i dikey
-turda hiç pencere üretemediği için (`clips.json` → `dropped`) kota,
-geriye kalan iki uzun segmentin düşük puanlı pencereleriyle doluyor.
+kaçınılmaz olarak düşük puan alıyor. İki segment kota dışı kaldı
+(`clips.json` → `dropped`): seg_021 (skor 53.5, hook'tan sonra yalnızca
+14.9 sn kalıyor, dikey 20 sn istiyor) ve seg_002 (skor 50.8, 46.1 sn
+kalıyor, yatay 60 sn istiyor).
 
-En somut kayıp: **videonun en yüksek skorlu segmenti seg_006 (70.1) hiç
-klip üretmiyor** — hook'undan sonra yalnızca 14.7 saniye kalıyor, dikey
-format 20 istiyor. Klip bir zaman aralığı, segment ise yalnızca bir
-sınır; pencerenin segment sınırını aşmasına izin vermek bunu çözer ama
-**hangi kliplerin yayınlanacağını değiştirir**, o yüzden bugün
-yapılmadı — karar sizin.
+**28 Ağustos notunda anlatılan spesifik kayıp (en yüksek skorlu segment
+seg_006'nın hiç klip üretmemesi) bu koşuda gözlenmiyor** — seg_006
+(63.3, en yüksek skorlu segment) bu sefer üç klibe kaynaklık etti
+(c01a, c01b, c04). Bu, formülün düzeldiği anlamına gelmiyor; `segment`/
+`score` LLM'ye bağlı olduğu için sınırlar koşudan koşuya kaymış ve bu
+kez seg_006'nın hook'undan sonra yeterli oda kalmış. Genel formül
+davranışı (kısa pencere cezası) hâlâ geçerli ve iki klipte gözleniyor;
+belirli bir segmentin hangi koşuda kaybedeceği deterministik değil.
+Pencerenin segment sınırını aşmasına izin vermek bunu çözer ama
+**hangi kliplerin yayınlanacağını değiştirir**, o yüzden yapılmadı —
+karar sizin.
 
 ## Sıradaki adımlar
 
@@ -116,8 +133,11 @@ yvc run "https://www.youtube.com/watch?v=r39OrneyMDs"
 
 Teslimden önce sırada:
 
-1. **Demo videosu (5-10 dk ekran kaydı)** — zorunlu teslim, henüz yok.
-   Çekim listesi hazır: [DEMO.md](DEMO.md).
+1. **Demo videosu (5-10 dk ekran kaydı)** — zorunlu teslim, repoya
+   girmiyor: teslim e-postasına ayrı ek olarak eklenecek. Çekim listesi
+   hazır: [DEMO.md](DEMO.md) — kaydı bu koşunun üzerinden çekiyorsanız
+   `seg_007`/`seg_029` örnekleri artık geçerli değil, dosyanın
+   güncellenmiş hâlindeki `seg_006`/`seg_010` örneklerini kullanın.
 2. ~~Klipleri YouTube'a yükle...~~ **Karar: YouTube'a gerçek yükleme
    onaylanmadı (28 Ağustos).** Gerçek metrik/hook-motoru geri besleme
    döngüsü bu onay gelene kadar devre dışı; 52 metrik satırının 52'si
@@ -133,12 +153,15 @@ Teslimden önce sırada:
    kullanım başına ödeme, ama hepsi **30 saniye** klip sınırı taşıyor
    (bizim klipler 36-120 sn, önce parçalara bölüp sonra dikmek gerekir).
    Higgsfield/Kling'in kendi resmi API'lerinde bu özellik hiç yok.
-3. seg_006 kararı (yukarıda).
+3. Pencere/segment sınırı kararı (yukarıda) — hâlâ alınmadı, formül
+   aynı kaldı.
 
 ## Açık kalan işler
 
-- **Demo videosu** — zorunlu, henüz yok.
-- **Pencere/segment sınırı** — seg_006 kaybı, yukarıda.
+- **Demo videosu** — zorunlu, repoda değil (ayrı e-posta eki olarak
+  teslim ediliyor).
+- **Pencere/segment sınırı** — yukarıdaki genel formül deseni (kısa
+  pencere cezası), karar verilmedi.
 - `source.min_height` bilerek `config.yaml`'a **eklenmedi**: `source`
   bloğuna dokunmak acquire'ın parmak izini değiştirip transcribe'dan
   itibaren her şeyi geçersiz kılıyor (25+ dk yeniden koşu, sonuç aynı).
